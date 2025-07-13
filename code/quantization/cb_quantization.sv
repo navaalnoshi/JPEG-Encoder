@@ -12,6 +12,16 @@ Description:
     - Stage 1: Input registration and sign-extension
     - Stage 2: Multiplication with quantization factors
     - Stage 3: Output rounding and quantization result
+
+Inputs:
+    clk        : Clock signal
+    rst        : Active-high reset
+    enable     : Enables loading of new input data
+    Z[8][8]    : 8x8 matrix of 11-bit signed DCT coefficients
+
+Outputs:
+    Q[8][8]        : 8x8 matrix of 11-bit quantized output values
+    out_enable     : Asserted when Q is valid (3 clock cycles after enable)
 --------------------------------------------------------------------------- */
 
 `timescale 1ns / 100ps
