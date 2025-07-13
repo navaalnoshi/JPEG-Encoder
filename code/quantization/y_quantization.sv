@@ -1,5 +1,3 @@
-`timescale 1ns / 100ps
-
 // -----------------------------------------------------------------------------
 // Module: y_quantizer
 // Description:
@@ -9,7 +7,7 @@
 //   according to the JPEG compression standard.
 //   The quantization process is pipelined over 3 clock cycles.
 // -----------------------------------------------------------------------------
-
+`timescale 1ns / 100ps
 module y_quantizer #(
     // Quantization matrix parameter (can be modified for custom quantization)
     parameter integer Q[8][8] = '{
