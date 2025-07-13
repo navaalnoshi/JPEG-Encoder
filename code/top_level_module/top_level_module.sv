@@ -1,12 +1,33 @@
-/* This is the top level module of the JPEG Encoder Core.
-This module takes the output from the fifo_out module and sends it 
-to the ff_checker module to check for FF's in the bitstream.  When it finds an
-FF, it puts a 00 after it, and then continues with the rest of the bitstream.
-At the end of the file, if there is not a full 32 bit set of JPEG data, then the
-signal "eof_data_partial_ready" will go high, to indicate there
-are less than 32 valid JPEG bits in the bitstream.  The number of valid bits in the
-last JPEG_bitstream value is written to the signal "end_of_file_bitstream_count".
-*/
+// -----------------------------------------------------------------------------
+// Module: jpeg_top
+//
+// Description:
+//   This is the top-level module for the JPEG Encoder Core.
+//   It connects the `fifo_out` and `ff_checker` submodules to create the final
+//   JPEG output stream. It performs the following tasks:
+//
+//   1. Receives 24-bit encoded input data from `fifo_out`.
+//   2. Passes this data to `ff_checker`, which inserts `0x00` after any `0xFF`
+//      in the bitstream (as required by the JPEG format).
+//   3. At end-of-file, if the bitstream contains fewer than 32 valid bits,
+//      it signals this with `eof_data_partial_ready` and outputs the valid bit
+//      count using `end_of_file_bitstream_count`.
+//
+// Inputs:
+//   - clk                       : Clock signal
+//   - rst                       : Active-high synchronous reset
+//   - end_of_file_signal        : Signals the final data input
+//   - enable                    : Enables data flow from fifo_out
+//   - data_in[23:0]             : 24-bit input data (from entropy encoder)
+//
+// Outputs:
+//   - JPEG_bitstream[31:0]      : Final 32-bit JPEG-compliant output
+//   - data_ready                : Indicates `JPEG_bitstream` is valid
+//   - end_of_file_bitstream_count[4:0]
+//                               : Valid bit count in final output word
+//   - eof_data_partial_ready    : Asserted when output has <32 valid bits
+// -----------------------------------------------------------------------------
+
 `timescale 1ns / 100ps
 
 module jpeg_top (
@@ -21,12 +42,18 @@ module jpeg_top (
     output logic         eof_data_partial_ready
 );
 
-    // Internal wires
-    logic [31:0] JPEG_FF;
-    logic        data_ready_FF;
-    logic [4:0]  orc_reg_in;
+    // -------------------------------------------------------------------------
+    // Internal Signals
+    // -------------------------------------------------------------------------
+    logic [31:0] JPEG_FF;                  // Output from fifo_out to ff_checker
+    logic        data_ready_FF;            // Data ready from fifo_out
+    logic [4:0]  orc_reg_in;               // Output register count from fifo_out
 
-    // Instantiate fifo_out module
+    // -------------------------------------------------------------------------
+    // Submodule: fifo_out
+    // Description:
+    //   This module packs and outputs the encoded JPEG bits into a 32-bit word.
+    // -------------------------------------------------------------------------
     fifo_out u19 (
         .clk(clk),
         .rst(rst),
@@ -37,7 +64,11 @@ module jpeg_top (
         .orc_reg(orc_reg_in)
     );
 
-    // Instantiate ff_checker module
+    // -------------------------------------------------------------------------
+    // Submodule: ff_checker
+    // Description:
+    //   Inserts a 0x00 byte after every 0xFF in the JPEG stream and handles EOF.
+    // -------------------------------------------------------------------------
     ff_checker u20 (
         .clk(clk),
         .rst(rst),
@@ -51,6 +82,9 @@ module jpeg_top (
         .eof_data_partial_ready(eof_data_partial_ready)
     );
 
+    // -------------------------------------------------------------------------
+    // Optional waveform generation for simulation (enabled with +define+TRACE)
+    // -------------------------------------------------------------------------
     `ifdef TRACE
     initial begin
         $dumpfile("waveform.vcd");
