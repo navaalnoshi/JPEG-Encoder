@@ -1,15 +1,35 @@
 // -----------------------------------------------------------------------------
 // Module: y_quantizer
+//
 // Description:
-//   This module performs quantization on an 8x8 block of input values (`Z`),
-//   which are typically the result of a 2D Discrete Cosine Transform (DCT).
-//   It uses a quantization matrix (`Q`) to scale the DCT coefficients
-//   according to the JPEG compression standard.
-//   The quantization process is pipelined over 3 clock cycles.
+//   This module performs quantization on an 8x8 block of luminance (Y) values
+//   after 2D Discrete Cosine Transform (DCT). Quantization reduces the precision
+//   of DCT coefficients, enabling lossy compression for JPEG encoding.
+//
+//   Instead of dividing each DCT coefficient by the corresponding value in a 
+//   quantization matrix (Q), this module precomputes reciprocals scaled by 4096,
+//   and performs multiplication followed by right-shift to approximate division.
+//
+//   The module operates using a 3-stage pipeline:
+//     Stage 1: Sign-extension and latching of input DCT coefficients
+//     Stage 2: Multiplication with quantization multipliers
+//     Stage 3: Final rounding and shift to produce quantized values
+//
+// Inputs:
+//   - clk        : Clock signal
+//   - rst        : Active-high synchronous reset
+//   - enable     : Enables data load into pipeline
+//   - Z[8][8]    : 8x8 input matrix of 11-bit signed DCT values
+//
+// Outputs:
+//   - Q_out[8][8]: 8x8 output matrix of quantized 11-bit values
+//   - out_enable : Output valid signal asserted 3 cycles after 'enable'
 // -----------------------------------------------------------------------------
+
 `timescale 1ns / 100ps
+
 module y_quantizer #(
-    // Quantization matrix parameter (can be modified for custom quantization)
+    // Quantization matrix (modifiable for different compression quality)
     parameter integer Q[8][8] = '{
         '{1, 1, 1, 1, 1, 1, 1, 1},
         '{1, 1, 1, 1, 1, 1, 1, 1},
@@ -22,16 +42,16 @@ module y_quantizer #(
     }
 ) (
     input  logic        clk,              // Clock signal
-    input  logic        rst,              // Active-high reset signal
-    input  logic        enable,           // Enable signal for input capture
-    input  logic [10:0] Z[8][8],          // 8x8 input matrix of DCT values
-    output logic [10:0] Q_out[8][8],      // 8x8 output matrix of quantized values
-    output logic        out_enable        // Indicates output is valid
+    input  logic        rst,              // Synchronous reset (active high)
+    input  logic        enable,           // Input load enable
+    input  logic [10:0] Z[8][8],          // 8x8 block of DCT inputs
+    output logic [10:0] Q_out[8][8],      // 8x8 block of quantized outputs
+    output logic        out_enable        // Valid output signal (after 3 cycles)
 );
 
     // -------------------------------------------------------------------------
-    // Pre-computed multiplier matrix (4096 / Q[i][j])
-    // Division is replaced by multiplication followed by right shift of 12 bits.
+    // Pre-computed multipliers (4096 / Q[i][j])
+    // Replace costly division with multiplication + right-shift
     // -------------------------------------------------------------------------
     localparam integer QQ[8][8] = {
         {4096/Q[0][0], 4096/Q[0][1], 4096/Q[0][2], 4096/Q[0][3], 4096/Q[0][4], 4096/Q[0][5], 4096/Q[0][6], 4096/Q[0][7]},
@@ -44,7 +64,7 @@ module y_quantizer #(
         {4096/Q[7][0], 4096/Q[7][1], 4096/Q[7][2], 4096/Q[7][3], 4096/Q[7][4], 4096/Q[7][5], 4096/Q[7][6], 4096/Q[7][7]}
     };
 
-    // Quantization multipliers (assigned from QQ matrix)
+    // Wire assignments for quantization multipliers
     logic [12:0] QM[8][8];
     for (genvar i = 0; i < 8; i++) begin : gen_qm_assign
         for (genvar j = 0; j < 8; j++) begin
@@ -53,17 +73,16 @@ module y_quantizer #(
     end
 
     // -------------------------------------------------------------------------
-    // Pipeline Registers
+    // Pipeline Stage Registers
     // -------------------------------------------------------------------------
-    logic signed [31:0] Z_int[8][8];     // Stage 1: Signed extension of input Z
-    logic signed [22:0] Z_temp[8][8];    // Stage 2: Z_int * QM
-    logic signed [22:0] Z_temp_1[8][8];  // Stage 3: Pipelined result of Z_temp
+    logic signed [31:0] Z_int[8][8];     // Stage 1: Input sign-extension
+    logic signed [22:0] Z_temp[8][8];    // Stage 2: Multiplication result
+    logic signed [22:0] Z_temp_1[8][8];  // Stage 3: Pipelined result for rounding
 
-    // Enable signal pipeline (3-cycle delay)
-    logic enable_dly[3];
+    logic enable_dly[3];                 // Pipeline control signals
 
     // -------------------------------------------------------------------------
-    // Pipeline: Enable signal shift register
+    // Pipeline Control: shift enable signal across 3 stages
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -73,86 +92,71 @@ module y_quantizer #(
             enable_dly[0] <= enable;
             enable_dly[1] <= enable_dly[0];
             enable_dly[2] <= enable_dly[1];
-            out_enable <= enable_dly[2]; // Output valid after 3 cycles
+            out_enable    <= enable_dly[2]; // Output ready on 3rd cycle
         end
     end
 
     // -------------------------------------------------------------------------
-    // Stage 1: Sign-extend the 11-bit input values to 32-bit signed integers
+    // Stage 1: Input registration and sign-extension
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
                     Z_int[i][j] <= '0;
-                end
-            end
         end else if (enable) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
-                    Z_int[i][j] <= signed'(Z[i][j]); // Automatic sign-extension
-                end
-            end
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
+                    Z_int[i][j] <= signed'(Z[i][j]); // Sign-extend from 11 to 32 bits
         end
     end
 
     // -------------------------------------------------------------------------
-    // Stage 2: Multiply Z_int by the precomputed multiplier QM
+    // Stage 2: Multiply input with quantization multipliers (no division)
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
                     Z_temp[i][j] <= '0;
-                end
-            end
         end else if (enable_dly[0]) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
-                    Z_temp[i][j] <= Z_int[i][j] * QM[i][j]; // Avoids division
-                end
-            end
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
+                    Z_temp[i][j] <= Z_int[i][j] * QM[i][j];
         end
     end
 
     // -------------------------------------------------------------------------
-    // Stage 3: Pipeline the result of multiplication for 1 cycle
+    // Stage 3: Pipeline intermediate result to align with control
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
                     Z_temp_1[i][j] <= '0;
-                end
-            end
         end else if (enable_dly[1]) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
-                    Z_temp_1[i][j] <= Z_temp[i][j]; // Store intermediate result
-                end
-            end
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
+                    Z_temp_1[i][j] <= Z_temp[i][j];
         end
     end
 
     // -------------------------------------------------------------------------
-    // Stage 4: Final quantization - shift right by 12 bits with rounding
+    // Stage 4: Final quantization by right shift and rounding
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
-            for (int i = 0; i < 8; i++) begin
-                for (int j = 0; j < 8; j++) begin
+            for (int i = 0; i < 8; i++)
+                for (int j = 0; j < 8; j++)
                     Q_out[i][j] <= '0;
-                end
-            end
         end else if (enable_dly[2]) begin
-            for (int i = 0; i < 8; i++) begin
+            for (int i = 0; i < 8; i++)
                 for (int j = 0; j < 8; j++) begin
-                    // Rounding: if the 12th bit is 1, add 1 after shift
-                    Q_out[i][j] <= (Z_temp_1[i][j][11]) 
+                    // Round result by checking bit 11 of fractional part
+                    Q_out[i][j] <= Z_temp_1[i][j][11] 
                         ? (Z_temp_1[i][j] >>> 12) + 1 
-                        : (Z_temp_1[i][j] >>> 12);
+                        :  (Z_temp_1[i][j] >>> 12);
                 end
-            end
         end
     end
 
