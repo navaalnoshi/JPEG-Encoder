@@ -1,9 +1,36 @@
-/*
-This module takes the JPEG_bitstream as its input, and checks for any FF values in
-the bitstream. When it finds an FF in the bitstream, this module puts a 00 after the FF,
-and then continues with the rest of the bitstream after the 00, per the JPEG standard.
-*/
-
+/* -----------------------------------------------------------------------------
+ * Module: ff_checker
+ * Description:
+ *   SystemVerilog implementation of a JPEG bitstream post-processor.
+ *   This module scans incoming 32-bit data chunks for any byte equal to 0xFF.
+ *   In compliance with the JPEG standard, if such a byte is found, the module
+ *   appends a 0x00 byte immediately after to escape the FF marker.
+ *
+ *   This logic ensures the JPEG stream does not get corrupted or misinterpreted
+ *   as marker segments, especially during decoding or storage.
+ *
+ * Functional Highlights:
+ *   - Multi-stage pipelining (8 stages) is used to stagger the check-insert logic.
+ *   - Registers maintain partial bits, byte counts, rollover detection, and ORC.
+ *   - Integration with a downstream FIFO allows dynamic delay buffering.
+ *   - Handles end-of-file cases with shortened valid lengths.
+ *   - Ensures 32-bit aligned and FF-clean output JPEG stream.
+ *
+ * Ports:
+ *   - clk, rst                 : Standard synchronous logic clock/reset.
+ *   - end_of_file_signal      : Tells the module this is the final input packet.
+ *   - JPEG_in [31:0]          : Incoming data word.
+ *   - data_ready_in           : High when JPEG_in contains valid data.
+ *   - orc_reg_in [4:0]        : Valid bit count in JPEG_in (ORC = output remaining count).
+ *   - JPEG_bitstream_1 [31:0] : Cleaned output word with inserted 0x00s after 0xFFs.
+ *   - data_ready_1            : High when JPEG_bitstream_1 has valid data.
+ *   - orc_reg [4:0]           : Valid bit count in JPEG_bitstream_1.
+ *   - eof_data_partial_ready  : Signifies valid partial output for EOF alignment.
+ *
+ * Usage:
+ *   - Intended for use after `fifo_out` in a JPEG encoding pipeline.
+ *   - Requires `sync_fifo_ff` to be available as internal buffer support.
+ * ----------------------------------------------------------------------------- */
 `timescale 1ns / 100ps
 
 module ff_checker #(
@@ -21,8 +48,9 @@ module ff_checker #(
     output logic [ORC_WIDTH-1:0]   orc_reg,
     output logic                   eof_data_partial_ready
 );
-
+    // -----------------------------------------------------------------------------
     // --- Pipeline Registers and FF Counts ---
+    // ----------------------------------------------------------------------------- 
     localparam int PIPELINE_STAGES = 8;
     localparam int BYTE_WIDTH = 8;
 
@@ -44,11 +72,16 @@ module ff_checker #(
     logic [1:0] FF_count_1; // delayed FF_count for EOF
     logic [1:0] FF_eof_shift; // shift amount for EOF data
 
+    // -----------------------------------------------------------------------------
     // --- Rollover Logic ---
+    // -----------------------------------------------------------------------------
     logic   rollover;
     logic   rollover_q [0:4]; // rollover_1 to rollover_5
 
+    // -----------------------------------------------------------------------------
     // --- FIFO Interface ---
+    // -----------------------------------------------------------------------------
+    
     logic [87:0] JPEG_pf;
     logic [1:0]  ffc_postfifo;
     logic        rollover_pf;
@@ -57,7 +90,10 @@ module ff_checker #(
     wire [90:0]  write_data = { JPEG_out_1, ffc_q[6], rollover_q[4] }; // ffc_7 is ffc_q[6], rollover_5 is rollover_q[4]
     wire         fifo_empty, rdata_valid;
 
+    // -----------------------------------------------------------------------------
     // --- FIFO Instantiation (assuming sync_fifo_ff is defined elsewhere) ---
+    // -----------------------------------------------------------------------------
+    
     sync_fifo_ff u18 (
         .clk(clk),
         .rst(rst),
@@ -70,14 +106,20 @@ module ff_checker #(
         .rdata_valid(rdata_valid)
     );
 
+    // -----------------------------------------------------------------------------
     // --- Output and Rollover from FIFO ---
+    // -----------------------------------------------------------------------------
+    
     logic [DATA_WIDTH-1:0] JPEG_bitstream;
     logic [DATA_WIDTH-1:0] JPEG_ro;
     logic [23:0] JPEG_ro_ro;
     logic        data_ready; // internal data_ready before EOF mux
     logic        rpf_1; // lagged rollover_pf
 
+    // -----------------------------------------------------------------------------
     // --- EOF Registers and Logic ---
+    // -----------------------------------------------------------------------------
+    
     logic   end_of_file_enable_hold;
     logic   eof_count_enable;
     logic [8:0] eof_count; // 9'b011110000 = 240
@@ -101,8 +143,10 @@ module ff_checker #(
     logic eof_dpr_1, eof_dpr_2;
     logic eof_bits_1, eof_bits_2, eof_bits_3;
 
-
+    // -----------------------------------------------------------------------------
     // --- Pipelined Data Ready (dr_in_X) ---
+    // -----------------------------------------------------------------------------
+    
     always_ff @(posedge clk) begin : p_dr_in
         if (rst) begin
             for (int i = 0; i < PIPELINE_STAGES; i++) dr_in_q[i] <= '0;
@@ -112,7 +156,10 @@ module ff_checker #(
         end
     end
 
+    // -----------------------------------------------------------------------------
     // --- Initial FF Detection and JPEG_1 ---
+    // -----------------------------------------------------------------------------
+    
     always_ff @(posedge clk) begin : p_initial_ff_detect
         if (rst) begin
             first_2bytes <= '0; second_2bytes <= '0;
@@ -129,10 +176,12 @@ module ff_checker #(
         end
     end
 
+    // -----------------------------------------------------------------------------
     // --- Main FF Insertion Pipeline (JPEG_2 to JPEG_7, JPEG_out, JPEG_out_1) ---
     // This part requires careful replication of the original's complex shifting.
     // We cannot simply use a generic shift as the original's shifts are conditional
     // on *which* byte was FF.
+    // -----------------------------------------------------------------------------
 
     // JPEG_2, ct_1, FF_count, ffc_1
     always_ff @(posedge clk) begin : p_jpeg2_ffc1
@@ -266,8 +315,11 @@ module ff_checker #(
             for (int i = 1; i < 5; i++) rollover_q[i] <= rollover_q[i-1];
         end
     end
-
+    
+    // -----------------------------------------------------------------------------
     // --- FIFO Read and Output Control ---
+    // -----------------------------------------------------------------------------
+    
     always_ff @(posedge clk) begin : p_fifo_read_control
         if (rst) begin
             read_req <= '0;
@@ -299,8 +351,11 @@ module ff_checker #(
             end
         end
     end
-
+    
+    // -----------------------------------------------------------------------------
     // --- Main Bitstream Output (JPEG_bitstream) ---
+    // -----------------------------------------------------------------------------
+    
     // Combine the 4 always_ff blocks for JPEG_bitstream[31:0]
     always_ff @(posedge clk) begin : p_jpeg_bitstream
         if (rst) begin
@@ -356,8 +411,9 @@ module ff_checker #(
         end
     end
 
-
+    // -----------------------------------------------------------------------------
     // --- EOF Logic ---
+    // -----------------------------------------------------------------------------
 
     // End of file counting and enabling
     always_ff @(posedge clk) begin : p_eof_control
@@ -493,7 +549,10 @@ module ff_checker #(
         end
     end
 
+    // -----------------------------------------------------------------------------
     // EOF data ready signals
+    // -----------------------------------------------------------------------------
+    
     always_ff @(posedge clk) begin : p_eof_data_ready_signals
         if (rst) begin
             eof_bits_1 <= '0; eof_bits_2 <= '0; eof_bits_3 <= '0;
@@ -529,7 +588,10 @@ module ff_checker #(
         end
     end
 
+    // -----------------------------------------------------------------------------
     // Final output mux
+    // -----------------------------------------------------------------------------
+    
     always_ff @(posedge clk) begin : p_final_output
         if (rst) begin
             data_ready_1 <= '0; JPEG_bitstream_1 <= '0;
