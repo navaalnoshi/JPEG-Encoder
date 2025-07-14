@@ -1,9 +1,30 @@
-/* This module takes the y, cb, and cr inputs from the pre_fifo module,
-and it combines the bits into the jpeg_bitstream. It uses 3 FIFO's to
-write the y, cb, and cr data while it's processing the data. The output
-of this module goes to the input of the ff_checker module, to check for
-any FF's in the bitstream.
-*/
+/* ---------------------------------------------------------------------------
+Module: fifo_out
+
+Description:
+    This module combines Y, Cb, and Cr JPEG encoded bitstreams into a single 
+    32-bit JPEG output stream. It uses three FIFOs—one each for Y, Cb, and Cr—
+    to buffer and multiplex encoded data. It also aligns data according to the
+    number of remaining output register count (ORC) bits and applies necessary
+    shifting and padding. The output of this module connects to the ff_checker
+    module for byte stuffing (e.g., inserting 0x00 after 0xFF).
+
+    The logic includes multiple pipelining stages and multiplexing to handle
+    overlapping bitstreams and end-of-block signals. The module operates on a 
+    strict clocked pipeline to ensure timing alignment for JPEG formatting.
+
+Inputs:
+    clk           : Clock signal
+    rst           : Asynchronous active-high reset
+    enable        : Enable signal to initiate processing
+    data_in       : Input data from upstream module (e.g., Huffman-encoded block)
+
+Outputs:
+    JPEG_bitstream : Final 32-bit aligned output stream
+    data_ready      : High when JPEG_bitstream contains valid data
+    orc_reg         : ORC value corresponding to JPEG_bitstream
+--------------------------------------------------------------------------- */
+
 `timescale 1ns / 100ps
 
 module fifo_out(
@@ -16,21 +37,28 @@ module fifo_out(
     output logic [4:0]  orc_reg
 );
 
-    // Wires from pre_fifo and for FIFO instantiation
+    // ------------------------------------------------------------------------
+    // Internal Wires and Registers
+    // ------------------------------------------------------------------------
+    // Wires for individual JPEG bitstreams and control signals for Y, Cb, Cr
     logic [31:0] cb_JPEG_bitstream, cr_JPEG_bitstream, y_JPEG_bitstream;
     logic [4:0]  cr_orc, cb_orc, y_orc;
+    logic        cb_data_ready, cr_data_ready, y_data_ready;
+    logic        cb_eob_empty, cr_eob_empty, y_eob_empty;
+    logic        end_of_block_output;
+    
+    // FIFOs data out, enable, empty
     logic [31:0] y_bits_out;
     logic        y_out_enable;
-    logic        cb_data_ready, cr_data_ready, y_data_ready;
-    logic        end_of_block_output, y_eob_empty;
-    logic        cb_eob_empty, cr_eob_empty;
     logic        y_fifo_empty;
 
-    // Internal Registers (using logic for consistency)
+    // ORC pipelining and muxing control signals
     logic [4:0] orc, orc_cb, orc_cr, old_orc_reg, sorc_reg, roll_orc_reg;
     logic [4:0] orc_reg_delay;
     logic [4:0] cr_orc_1, cb_orc_1, y_orc_1;
     logic       cr_out_enable_1, cb_out_enable_1, y_out_enable_1;
+
+    // Mux selectors and internal control logic
     logic [2:0] bits_mux, old_orc_mux, read_mux;
     logic       bits_ready;
     logic       rollover, rollover_eob;
@@ -38,53 +66,33 @@ module fifo_out(
     logic       cb_read_req, cr_read_req, y_read_req;
     logic       eob_early_out_enable, fifo_mux;
 
-    // Pipelined registers using packed arrays for conciseness
-    logic [7:1] br_pipe;            // Replaces br_1 to br_8
-    logic [5:1][4:0] static_orc_pipe; // Replaces static_orc_1 to static_orc_5
-    logic [35:1] enable_pipe;       // Replaces enable_1 to enable_35
-    logic [3:1] eob_pipe;           // Replaces eob_1 to eob_4
-    logic [6:1] rollover_pipe;      // Replaces rollover_1 to rollover_7
+    // Pipelined control logic
+    logic [7:1] br_pipe;               // Valid bits pipeline stages (br_1 to br_7)
+    logic [5:1][4:0] static_orc_pipe;  // ORC static values across stages
+    logic [35:1] enable_pipe;          // Enable pulse tracking
+    logic [3:1] eob_pipe;              // End-of-block pipelining
+    logic [6:1] rollover_pipe;         // Rollover signal pipeline
 
-    // Pipelined JPEG data and ORC values
-    logic [31:0] jpeg_pipe[0:6]; // Replaces jpeg, jpeg_1, ..., jpeg_6
-    logic [4:0] orc_pipe[0:5];   // Replaces orc_1, ..., orc_5
-    logic [31:0] jpeg_ro_pipe[0:5]; // Replaces jpeg_ro_1, ..., jpeg_ro_5
-    logic [4:0] edge_ro_pipe[0:5];  // Replaces edge_ro_1, ..., edge_ro_5
+    // JPEG data pipelines
+    logic [31:0] jpeg_pipe[0:6];       // JPEG data per stage
+    logic [4:0]  orc_pipe[0:5];        // ORC tracking pipeline
+    logic [31:0] jpeg_ro_pipe[0:5];    // JPEG rotated outputs
+    logic [4:0]  edge_ro_pipe[0:5];    // Edge ORC values per stage
     logic [31:0] jpeg_delay;
 
-    // FIFO Instantiation Wires (multiplexed based on fifo_mux)
+    // FIFO muxed output selection
     logic [31:0] cr_bits_out1, cr_bits_out2, cb_bits_out1, cb_bits_out2;
     logic        cr_fifo_empty1, cr_fifo_empty2, cb_fifo_empty1, cb_fifo_empty2;
     logic        cr_out_enable1, cr_out_enable2, cb_out_enable1, cb_out_enable2;
 
+    // FIFO write enables
     logic        cr_write_enable_comb = cr_data_ready && !cr_eob_empty;
     logic        cb_write_enable_comb = cb_data_ready && !cb_eob_empty;
     logic        y_write_enable_comb = y_data_ready && !y_eob_empty;
 
-    // Combinational logic for FIFO muxing
-    assign cr_read_req1 = fifo_mux ? 1'b0 : cr_read_req;
-    assign cr_read_req2 = fifo_mux ? cr_read_req : 1'b0;
-    assign cr_JPEG_bitstream1 = fifo_mux ? cr_JPEG_bitstream : 32'b0;
-    assign cr_JPEG_bitstream2 = fifo_mux ? 32'b0 : cr_JPEG_bitstream;
-    assign cr_write_enable1 = fifo_mux && cr_write_enable_comb;
-    assign cr_write_enable2 = !fifo_mux && cr_write_enable_comb;
-    assign cr_bits_out = fifo_mux ? cr_bits_out2 : cr_bits_out1;
-    assign cr_fifo_empty = fifo_mux ? cr_fifo_empty2 : cr_fifo_empty1;
-    assign cr_out_enable = fifo_mux ? cr_out_enable2 : cr_out_enable1;
-
-    assign cb_read_req1 = fifo_mux ? 1'b0 : cb_read_req;
-    assign cb_read_req2 = fifo_mux ? cb_read_req : 1'b0;
-    assign cb_JPEG_bitstream1 = fifo_mux ? cb_JPEG_bitstream : 32'b0;
-    assign cb_JPEG_bitstream2 = fifo_mux ? 32'b0 : cb_JPEG_bitstream;
-    assign cb_write_enable1 = fifo_mux && cb_write_enable_comb;
-    assign cb_write_enable2 = !fifo_mux && cb_write_enable_comb;
-    assign cb_bits_out = fifo_mux ? cb_bits_out2 : cb_bits_out1;
-    assign cb_fifo_empty = fifo_mux ? cb_fifo_empty2 : cb_fifo_empty1;
-    assign cb_out_enable = fifo_mux ? cb_out_enable2 : cb_out_enable1;
-
-    // ---
-    // Instantiations
-    // ---
+    // ------------------------------------------------------------------------
+    // FIFO Control and Preprocessing Modules
+    // ------------------------------------------------------------------------
 
     pre_fifo u14(
         .clk(clk),
@@ -210,9 +218,9 @@ module fifo_out(
         end
     end
 
-    // ---
-    // JPEG Bitstream Processing Pipeline
-    // ---
+ // ------------------------------------------------------------------------
+ // JPEG Pipeline Shifting and Bit Manipulation (6 stages)
+ // ------------------------------------------------------------------------
 
     // Stage 0: Input Latch for JPEG data
     always_ff @(posedge clk or posedge rst) begin
@@ -229,7 +237,6 @@ module fifo_out(
         end
     end
 
-    // Pipeline stages for JPEG data shifting and ORC adjustment
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             for (int i = 1; i <= 6; i++) jpeg_pipe[i] <= 32'b0;
@@ -285,11 +292,9 @@ module fifo_out(
         end
     end
 
-    // ---
-    // Other Logic
-    // ---
-
-    // FIFO Muxing based on end of block
+     // ------------------------------------------------------------------------
+    // FIFO Mux and Read Request Management
+    // ------------------------------------------------------------------------
     always_ff @(posedge clk) begin
         if (rst)
             fifo_mux <= 1'b0;
@@ -466,25 +471,26 @@ module fifo_out(
         end
     end
 
-    // Final JPEG_bitstream output
+     // ------------------------------------------------------------------------
+    // Final JPEG Output and ORC Calculation
+    // ------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             JPEG_bitstream <= 32'b0;
-        end else if (br_pipe[6] && rollover_pipe[5]) begin // br_7 & rollover_6
+        end else if (br_pipe[6] && rollover_pipe[5]) begin
             JPEG_bitstream <= jpeg_pipe[6];
-        end else if (br_pipe[5]) begin // br_6
-            // This is equivalent to checking if static_orc_6 is <= 31, and for each bit, checking its specific threshold
-            // Simplified using a for loop or bit-wise conditional assignment
+        end else if (br_pipe[5]) begin
             for (int i = 0; i < 32; i++) begin
-                if (static_orc_pipe[5] <= (31 - i)) begin // static_orc_6 is static_orc_pipe[5]
+                if (static_orc_pipe[5] <= (31 - i)) begin
                     JPEG_bitstream[i] <= jpeg_pipe[6][i];
                 end else begin
-                    JPEG_bitstream[i] <= 1'b0; // If condition is false, bit becomes 0
+                    JPEG_bitstream[i] <= 1'b0;
                 end
             end
         end else begin
-            JPEG_bitstream <= 32'b0; // Default when neither condition is met
+            JPEG_bitstream <= 32'b0;
         end
     end
 
 endmodule
+
