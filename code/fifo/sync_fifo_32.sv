@@ -6,18 +6,6 @@ Description:
   - FIFO depth: 16 entries.
   - Generates `read_data`, `fifo_empty`, and `rdata_valid` signals.
   - Used to stage data in JPEG processing or other pipelined architectures.
-
-Inputs:
-  - clk           : Clock signal.
-  - rst           : Asynchronous active-high reset.
-  - read_req      : Read request from the consumer module.
-  - write_data    : 32-bit data input to write into the FIFO.
-  - write_enable  : Write enable signal for FIFO.
-  
-Outputs:
-  - read_data     : 32-bit data output from the FIFO.
-  - fifo_empty    : Flag to indicate if FIFO is empty.
-  - rdata_valid   : Flag to indicate if read_data is valid.
 --------------------------------------------------------------------------------
 */
 
@@ -37,6 +25,7 @@ module sync_fifo_32 (
     // -------------------------------
     // FIFO memory and control signals
     // -------------------------------
+  
     logic [4:0]  read_ptr;          // Full pointer for depth management (5 bits = up to 32)
     logic [4:0]  write_ptr;
     logic [31:0] mem [0:15];        // FIFO storage for 16 entries
