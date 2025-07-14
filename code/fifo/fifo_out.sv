@@ -16,252 +16,836 @@ Description:
 `timescale 1ns / 100ps
 
 module fifo_out(
-    input   logic         clk,          // Clock signal
-    input   logic         rst,          // Asynchronous reset signal (active high)
-    input   logic         enable,       // Master enable for the module
-    input   logic [23:0]  data_in,      // Input data from the pre_fifo module
-    output  logic [31:0]  JPEG_bitstream, // Output JPEG bitstream
-    output  logic         data_ready,   // Indicates when a new 32-bit JPEG_bitstream is ready
-    output  logic [4:0]   orc_reg       // Output register for the 'offset run count'
+    input         clk,         // Clock input
+    input         rst,         // Reset input
+    input         enable,      // Enable signal
+    input  [23:0] data_in,     // 24-bit input data
+    output [31:0] JPEG_bitstream, // 32-bit JPEG bitstream output
+    output        data_ready,  // Data ready signal
+    output [4:0]  orc_reg      // Output register for orc value
 );
 
-    // -------------------------------------------------------------------------------
-    // Internal Signal Declarations
-     // -------------------------------------------------------------------------------
+// Wires for JPEG bitstream and orc values from pre_fifo
+wire  [31:0]  cb_JPEG_bitstream, cr_JPEG_bitstream, y_JPEG_bitstream;
+wire  [4:0]   cr_orc, cb_orc, y_orc;
 
-    // Data and ORC (Offset Run Count) signals from the pre_fifo module
-    
-    logic [31:0]  cb_JPEG_bitstream, cr_JPEG_bitstream, y_JPEG_bitstream; // 32-bit JPEG data from pre_fifo for Cb, Cr, Y
-    logic [4:0]   cr_orc, cb_orc, y_orc; // 5-bit ORC values from pre_fifo for Cr, Cb, Y
+// Wires for Y component output from FIFO and enable signal
+wire  [31:0]  y_bits_out;
+wire          y_out_enable;
 
-    // Output data and enable signals from the Y FIFO
-    logic [31:0]  y_bits_out;     // 32-bit data read from the Y FIFO
-    logic         y_out_enable;   // Indicates valid data read from Y FIFO
+// Wires for data ready signals from pre_fifo and FIFO empty status
+wire          cb_data_ready, cr_data_ready, y_data_ready;
+wire          end_of_block_output, y_eob_empty;
+wire          cb_eob_empty, cr_eob_empty;
+wire          y_fifo_empty;
 
-    // Data ready and FIFO empty signals for FIFOs
-    logic         cb_data_ready, cr_data_ready, y_data_ready; // Indicates when data is ready from pre_fifo for writing to respective FIFOs
-    logic         end_of_block_output; // Indicates end of a block from pre_fifo (typically 8x8 block)
-    logic         y_eob_empty;         // Y FIFO End-of-Block (EOB) status (empty implies no EOB marker received)
-    logic         cb_eob_empty;        // Cb FIFO EOB status
-    logic         cr_eob_empty;        // Cr FIFO EOB status
-    logic         y_fifo_empty;        // Y FIFO empty status
+// Registers for orc values and their delayed versions
+reg  [4:0]    orc, orc_reg, orc_cb, orc_cr, old_orc_reg, sorc_reg, roll_orc_reg;
+reg  [4:0]    orc_1, orc_2, orc_3, orc_4, orc_5, orc_reg_delay;
+reg  [4:0]    static_orc_1, static_orc_2, static_orc_3, static_orc_4, static_orc_5;
+reg  [4:0]    static_orc_6;
 
-    // Internal ORC registers and pipeline stages for ORC calculation and tracking
-    logic [4:0]   orc;          // ORC for Y component (calculated based on previous components)
-    logic [4:0]   orc_cb;       // ORC for Cb component
-    logic [4:0]   orc_cr;       // ORC for Cr component
-    logic [4:0]   old_orc_reg;  // Stores a previous ORC value for rollover calculations
-    logic [4:0]   sorc_reg;     // Selected ORC for current active component
-    logic [4:0]   roll_orc_reg; // ORC used for rollover comparison
+// Registers for edge rollover and JPEG bitstream values and their delayed versions
+reg  [4:0]    edge_ro_1, edge_ro_2, edge_ro_3, edge_ro_4, edge_ro_5;
+reg  [31:0]   jpeg_ro_1, jpeg_ro_2, jpeg_ro_3, jpeg_ro_4, jpeg_ro_5, jpeg_delay;
 
-    // Pipelined ORC values for shifting/processing the bitstream
-    logic [4:0]   orc_1, orc_2, orc_3, orc_4, orc_5;
-    logic [4:0]   orc_reg_delay; // Delayed version of orc_reg for bit manipulation
+// Registers for JPEG bitstream and its delayed versions
+reg  [31:0]   jpeg, jpeg_1, jpeg_2, jpeg_3, jpeg_4, jpeg_5, jpeg_6, JPEG_bitstream;
 
-    // Pipelined static ORC values (likely for output bit enabling)
-    logic [4:0]   static_orc_1, static_orc_2, static_orc_3, static_orc_4, static_orc_5;
-    logic [4:0]   static_orc_6;
+// Registers for delayed orc values and enable signals
+reg  [4:0]    cr_orc_1, cb_orc_1, y_orc_1;
+reg           cr_out_enable_1, cb_out_enable_1, y_out_enable_1, eob_1;
+reg           eob_2, eob_3, eob_4;
 
-    // Pipelined edge run-off values (for bit manipulation during shifting)
-    logic [4:0]   edge_ro_1, edge_ro_2, edge_ro_3, edge_ro_4, edge_ro_5;
+// Registers for various enable signals
+reg           enable_1, enable_2, enable_3, enable_4, enable_5;
+reg           enable_6, enable_7, enable_8, enable_9, enable_10;
+reg           enable_11, enable_12, enable_13, enable_14, enable_15;
+reg           enable_16, enable_17, enable_18, enable_19, enable_20;
+reg           enable_21, enable_22, enable_23, enable_24, enable_25;
+reg           enable_26, enable_27, enable_28, enable_29, enable_30;
+reg           enable_31, enable_32, enable_33, enable_34, enable_35;
 
-    // Pipelined JPEG data for bitstream construction and shifting
-    logic [31:0]  jpeg_ro_1, jpeg_ro_2, jpeg_ro_3, jpeg_ro_4, jpeg_ro_5, jpeg_delay;
+// Registers for mux control and bit ready signals
+reg  [2:0]    bits_mux, old_orc_mux, read_mux;
+reg           bits_ready, br_1, br_2, br_3, br_4, br_5, br_6, br_7, br_8;
 
-    // Main JPEG data registers in the pipeline
-    logic [31:0]  jpeg;     // Current JPEG data selected from Y, Cb, Cr FIFOs
-    logic [31:0]  jpeg_1, jpeg_2, jpeg_3, jpeg_4, jpeg_5, jpeg_6; // Pipelined stages of JPEG data
+// Registers for rollover conditions and EOB signals
+reg           rollover, rollover_1, rollover_2, rollover_3, rollover_eob;
+reg           rollover_4, rollover_5, rollover_6, rollover_7;
+reg           data_ready, eobe_1, cb_read_req, cr_read_req, y_read_req;
+reg           eob_early_out_enable, fifo_mux;
 
-    // Delayed ORC and enable signals from the FIFOs
-    logic [4:0]   cr_orc_1, cb_orc_1, y_orc_1; // Delayed ORC values from pre_fifo
-    logic         cr_out_enable_1, cb_out_enable_1, y_out_enable_1; // Delayed FIFO read enables
+// Wires for CR and CB FIFO outputs and empty/enable signals (for dual FIFOs)
+wire [31:0]   cr_bits_out1, cr_bits_out2, cb_bits_out1, cb_bits_out2;
+wire          cr_fifo_empty1, cr_fifo_empty2, cb_fifo_empty1, cb_fifo_empty2;
+wire          cr_out_enable1, cr_out_enable2, cb_out_enable1, cb_out_enable2;
 
-    // End-of-Block (EOB) pipeline stages
-    logic         eob_1, eob_2, eob_3, eob_4;
+// Write enable signals for FIFOs, based on data ready and EOB empty
+wire cb_write_enable = cb_data_ready && !cb_eob_empty;
+wire cr_write_enable = cr_data_ready && !cr_eob_empty;
+wire y_write_enable = y_data_ready && !y_eob_empty;
 
-    // Generic enable pipeline stages (used for controlling muxes and ORC calculations)
-    logic         enable_1, enable_2, enable_3, enable_4, enable_5;
-    logic         enable_6, enable_7, enable_8, enable_9, enable_10;
-    logic         enable_11, enable_12, enable_13, enable_14, enable_15;
-    logic         enable_16, enable_17, enable_18, enable_19, enable_20;
-    logic         enable_21, enable_22, enable_23, enable_24, enable_25;
-    logic         enable_26, enable_27, enable_28, enable_29, enable_30;
-    logic         enable_31, enable_32, enable_33, enable_34, enable_35;
+// FIFO muxing logic for CR component (distributing read/write to two FIFOs)
+wire cr_read_req1 = fifo_mux ? 1'b0 : cr_read_req;
+wire cr_read_req2 = fifo_mux ? cr_read_req : 1'b0;
+wire [31:0] cr_JPEG_bitstream1 = fifo_mux ? cr_JPEG_bitstream : 32'b0;
+wire [31:0] cr_JPEG_bitstream2 = fifo_mux ? 32'b0 : cr_JPEG_bitstream;
+wire cr_write_enable1 = fifo_mux && cr_write_enable;
+wire cr_write_enable2 = !fifo_mux && cr_write_enable;
+wire [31:0] cr_bits_out = fifo_mux ? cr_bits_out2 : cr_bits_out1;
+wire cr_fifo_empty = fifo_mux ? cr_fifo_empty2 : cr_fifo_empty1;
+wire cr_out_enable = fifo_mux ? cr_out_enable2 : cr_out_enable1;
 
-    // Mux select signals for controlling data flow based on Y/Cb/Cr components
-    logic [2:0]   bits_mux;     // Selects which component's data (Y, Cb, Cr) is currently active
-    logic [2:0]   old_orc_mux;  // Selects which component's ORC is considered 'old' for rollover
-    logic [2:0]   read_mux;     // Selects which FIFO to send a read request to
+// FIFO muxing logic for CB component (distributing read/write to two FIFOs)
+wire cb_read_req1 = fifo_mux ? 1'b0 : cb_read_req;
+wire cb_read_req2 = fifo_mux ? cb_read_req : 1'b0;
+wire [31:0] cb_JPEG_bitstream1 = fifo_mux ? cb_JPEG_bitstream : 32'b0;
+wire [31:0] cb_JPEG_bitstream2 = fifo_mux ? 32'b0 : cb_JPEG_bitstream;
+wire cb_write_enable1 = fifo_mux && cb_write_enable;
+wire cb_write_enable2 = !fifo_mux && cb_write_enable;
+wire [31:0] cb_bits_out = fifo_mux ? cb_bits_out2 : cb_bits_out1;
+wire cb_fifo_empty = fifo_mux ? cb_fifo_empty2 : cb_fifo_empty1;
+wire cb_out_enable = fifo_mux ? cb_out_enable2 : cb_out_enable1;
 
-    // Data ready and rollover control signals
-    logic         bits_ready;   // Indicates when current component's bits are valid
-    logic         br_1, br_2, br_3, br_4, br_5, br_6, br_7, br_8; // Pipelined 'bits_ready'
-    logic         rollover;     // Indicates a bitstream rollover condition
-    logic         rollover_1, rollover_2, rollover_3, rollover_eob; // Pipelined rollover
-    logic         rollover_4, rollover_5, rollover_6, rollover_7;
-    logic         eobe_1;       // Delayed Y EOB empty (End Of Block Empty)
-    logic         cb_read_req, cr_read_req, y_read_req; // FIFO read request signals
-    logic         eob_early_out_enable; // Early EOB detection for enabling output
-    logic         fifo_mux;     // Mux for switching between two sets of Cb/Cr FIFOs (likely for double buffering)
+// Instance of pre_fifo module to get Y, Cb, Cr data and EOB signals
+pre_fifo u14(
+    .clk(clk),
+    .rst(rst),
+    .enable(enable),
+    .data_in(data_in),
+    .cr_JPEG_bitstream(cr_JPEG_bitstream),
+    .cr_data_ready(cr_data_ready),
+    .cr_orc(cr_orc),
+    .cb_JPEG_bitstream(cb_JPEG_bitstream),
+    .cb_data_ready(cb_data_ready),
+    .cb_orc(cb_orc),
+    .y_JPEG_bitstream(y_JPEG_bitstream),
+    .y_data_ready(y_data_ready),
+    .y_orc(y_orc),
+    .y_eob_output(end_of_block_output),
+    .y_eob_empty(y_eob_empty),
+    .cb_eob_empty(cb_eob_empty),
+    .cr_eob_empty(cr_eob_empty)
+);
 
-    // Signals for routing data to the correct Cb/Cr FIFO instance based on fifo_mux
-    logic [31:0] cr_bits_out1, cr_bits_out2; // Outputs from Cr FIFO instances
-    logic [31:0] cb_bits_out1, cb_bits_out2; // Outputs from Cb FIFO instances
-    logic        cr_fifo_empty1, cr_fifo_empty2; // Empty flags for Cr FIFO instances
-    logic        cb_fifo_empty1, cb_fifo_empty2; // Empty flags for Cb FIFO instances
-    logic        cr_out_enable1, cr_out_enable2; // Read enable flags for Cr FIFO instances
-    logic        cb_out_enable1, cb_out_enable2; // Read enable flags for Cb FIFO instances
+// Instances of sync_fifo_32 for CB component (two FIFOs for muxing)
+sync_fifo_32 u15(
+    .clk(clk),
+    .rst(rst),
+    .read_req(cb_read_req1),
+    .write_data(cb_JPEG_bitstream1),
+    .write_enable(cb_write_enable1),
+    .read_data(cb_bits_out1),
+    .fifo_empty(cb_fifo_empty1),
+    .rdata_valid(cb_out_enable1)
+);
 
-     // -------------------------------------------------------------------------------
-    // Muxed FIFO read requests for Cb/Cr FIFOs.
-    // These signals determine which of the two FIFO instances (1 or 2) for Cb/Cr
-    // should receive the read request. Only one is active at a time based on `fifo_mux`.
-     // -------------------------------------------------------------------------------
-    
-    logic cr_read_req_out1; // Read request for Cr FIFO instance 1
-    logic cr_read_req_out2; // Read request for Cr FIFO instance 2
-    logic cb_read_req_out1; // Read request for Cb FIFO instance 1
-    logic cb_read_req_out2; // Read request for Cb FIFO instance 2
+sync_fifo_32 u25(
+    .clk(clk),
+    .rst(rst),
+    .read_req(cb_read_req2),
+    .write_data(cb_JPEG_bitstream2),
+    .write_enable(cb_write_enable2),
+    .read_data(cb_bits_out2),
+    .fifo_empty(cb_fifo_empty2),
+    .rdata_valid(cb_out_enable2)
+);
 
-     // -------------------------------------------------------------------------------
-    // FIFO write enable signals. A FIFO is written to if data is ready from pre_fifo
-    // and its corresponding EOB (End-of-Block) buffer is not empty (meaning there's
-    // still EOB information to process for that component).
-     // -------------------------------------------------------------------------------
-    
-    assign cb_write_enable = cb_data_ready && !cb_eob_empty;
-    assign cr_write_enable = cr_data_ready && !cr_eob_empty;
-    assign y_write_enable = y_data_ready && !y_eob_empty;
+// Instances of sync_fifo_32 for CR component (two FIFOs for muxing)
+sync_fifo_32 u16(
+    .clk(clk),
+    .rst(rst),
+    .read_req(cr_read_req1),
+    .write_data(cr_JPEG_bitstream1),
+    .write_enable(cr_write_enable1),
+    .read_data(cr_bits_out1),
+    .fifo_empty(cr_fifo_empty1),
+    .rdata_valid(cr_out_enable1)
+);
 
-     // -------------------------------------------------------------------------------
-    // FIFO read request routing based on `fifo_mux`. This effectively directs
-    // the single `cr_read_req` or `cb_read_req` to one of two FIFO instances.
-     // -------------------------------------------------------------------------------
-    
-    assign cr_read_req_out1 = fifo_mux ? 1'b0 : cr_read_req; // If fifo_mux is 1, cr_read_req1 is 0, else cr_read_req
-    assign cr_read_req_out2 = fifo_mux ? cr_read_req : 1'b0; // If fifo_mux is 1, cr_read_req2 is cr_read_req, else 0
+sync_fifo_32 u24(
+    .clk(clk),
+    .rst(rst),
+    .read_req(cr_read_req2),
+    .write_data(cr_JPEG_bitstream2),
+    .write_enable(cr_write_enable2),
+    .read_data(cr_bits_out2),
+    .fifo_empty(cr_fifo_empty2),
+    .rdata_valid(cr_out_enable2)
+);
 
-     // -------------------------------------------------------------------------------
-    // FIFO write enable routing based on `fifo_mux`. This ensures data is written
-    // to the currently selected FIFO instance.
-     // -------------------------------------------------------------------------------
-    
-    assign cr_write_enable1 = fifo_mux && cr_write_enable;     // If fifo_mux is 1, enable write to FIFO1
-    assign cr_write_enable2 = !fifo_mux && cr_write_enable;    // If fifo_mux is 0, enable write to FIFO2
+// Instance of sync_fifo_32 for Y component
+sync_fifo_32 u17(
+    .clk(clk),
+    .rst(rst),
+    .read_req(y_read_req),
+    .write_data(y_JPEG_bitstream),
+    .write_enable(y_write_enable),
+    .read_data(y_bits_out),
+    .fifo_empty(y_fifo_empty),
+    .rdata_valid(y_out_enable)
+);
 
-    assign cb_read_req_out1 = fifo_mux ? 1'b0 : cb_read_req;
-    assign cb_read_req_out2 = fifo_mux ? cb_read_req : 1'b0;
+// Sequential logic for fifo_mux: toggles on end_of_block_output
+always @(posedge clk) begin
+    if (rst)
+        fifo_mux <= 1'b0;
+    else if (end_of_block_output)
+        fifo_mux <= ~fifo_mux; // Toggles between 0 and 1
+end
 
-    assign cb_write_enable1 = fifo_mux && cb_write_enable;
-    assign cb_write_enable2 = !fifo_mux && cb_write_enable;
-    
-     // -------------------------------------------------------------------------------
-    // Muxed `write_data` for Cb/Cr FIFOs. When `fifo_mux` is 1, `cb_JPEG_bitstream`
-    // (from pre_fifo) is routed to FIFO2's `write_data` through `cb_JPEG_bitstream_sel`,
-    // and FIFO1's `write_data` gets 0 (don't care). This is a common pattern for
-    // double-buffered writes.
-    // -------------------------------------------------------------------------------
-    logic [31:0] cr_JPEG_bitstream_sel;
-    logic [31:0] cb_JPEG_bitstream_sel;
+// Sequential logic for y_read_req: asserts when Y FIFO is not empty and read_mux selects Y
+always @(posedge clk) begin
+    if (y_fifo_empty || read_mux != 3'b001)
+        y_read_req <= 1'b0;
+    else if (!y_fifo_empty && read_mux == 3'b001)
+        y_read_req <= 1'b1;
+end
 
-    assign cr_JPEG_bitstream_sel = fifo_mux ? cr_JPEG_bitstream : 32'b0;
-    assign cb_JPEG_bitstream_sel = fifo_mux ? cb_JPEG_bitstream : 32'b0;
+// Sequential logic for cb_read_req: asserts when CB FIFO is not empty and read_mux selects Cb
+always @(posedge clk) begin
+    if (cb_fifo_empty || read_mux != 3'b010)
+        cb_read_req <= 1'b0;
+    else if (!cb_fifo_empty && read_mux == 3'b010)
+        cb_read_req <= 1'b1;
+end
 
-    // Muxed outputs from Cb/Cr FIFOs. The `fifo_mux` selects which FIFO's output
-    // (read_data, fifo_empty, rdata_valid) is passed to the downstream logic.
-    logic [31:0] cr_bits_out_mux;
-    logic [31:0] cb_bits_out_mux;
-    logic        cr_fifo_empty_mux;
-    logic        cb_fifo_empty_mux;
-    logic        cr_out_enable_mux;
-    logic        cb_out_enable_mux;
+// Sequential logic for cr_read_req: asserts when CR FIFO is not empty and read_mux selects Cr
+always @(posedge clk) begin
+    if (cr_fifo_empty || read_mux != 3'b100)
+        cr_read_req <= 1'b0;
+    else if (!cr_fifo_empty && read_mux == 3'b100)
+        cr_read_req <= 1'b1;
+end
 
-    assign cr_bits_out_mux = fifo_mux ? cr_bits_out2 : cr_bits_out1;
-    assign cr_fifo_empty_mux = fifo_mux ? cr_fifo_empty2 : cr_fifo_empty1;
-    assign cr_out_enable_mux = fifo_mux ? cr_out_enable2 : cr_out_enable1;
+// Sequential logic for bit ready (br) signals and static orc values, and data_ready
+always @(posedge clk) begin
+    if (rst) begin
+        br_1 <= 1'b0; br_2 <= 1'b0; br_3 <= 1'b0; br_4 <= 1'b0; br_5 <= 1'b0; br_6 <= 1'b0;
+        br_7 <= 1'b0; br_8 <= 1'b0;
+        static_orc_1 <= 5'b0; static_orc_2 <= 5'b0; static_orc_3 <= 5'b0;
+        static_orc_4 <= 5'b0; static_orc_5 <= 5'b0; static_orc_6 <= 5'b0;
+        data_ready <= 1'b0; eobe_1 <= 1'b0;
+    end else begin
+        br_1 <= bits_ready & !eobe_1; // br_1 is bits_ready unless eob_early_out is enabled
+        br_2 <= br_1; br_3 <= br_2; // Delayed versions of br_1
+        br_4 <= br_3; br_5 <= br_4; br_6 <= br_5;
+        br_7 <= br_6; br_8 <= br_7;
+        static_orc_1 <= sorc_reg; static_orc_2 <= static_orc_1; // Delayed versions of sorc_reg
+        static_orc_3 <= static_orc_2; static_orc_4 <= static_orc_3;
+        static_orc_5 <= static_orc_4; static_orc_6 <= static_orc_5;
+        data_ready <= br_6 & rollover_5; // Data ready when br_6 and rollover_5 are high
+        eobe_1 <= y_eob_empty; // eobe_1 is high when Y EOB FIFO is empty
+    end
+end
 
-    assign cb_bits_out_mux = fifo_mux ? cb_bits_out2 : cb_bits_out1;
-    assign cb_fifo_empty_mux = fifo_mux ? cb_fifo_empty2 : cb_fifo_empty1;
-    assign cb_out_enable_mux = fifo_mux ? cb_out_enable2 : cb_out_enable1;
+// Sequential logic for rollover_eob: indicates rollover based on old_orc_reg and roll_orc_reg
+always @(posedge clk) begin
+    if (rst)
+        rollover_eob <= 1'b0;
+    else if (br_3)
+        rollover_eob <= old_orc_reg >= roll_orc_reg;
+end
 
+// Sequential logic for rollover signals and EOB signals (delayed versions)
+always @(posedge clk) begin
+    if (rst) begin
+        rollover_1 <= 1'b0; rollover_2 <= 1'b0; rollover_3 <= 1'b0;
+        rollover_4 <= 1'b0; rollover_5 <= 1'b0; rollover_6 <= 1'b0;
+        rollover_7 <= 1'b0; eob_1 <= 1'b0; eob_2 <= 1'b0;
+        eob_3 <= 1'b0; eob_4 <= 1'b0;
+        eob_early_out_enable <= 1'b0;
+    end else begin
+        rollover_1 <= rollover; rollover_2 <= rollover_1; // Delayed versions of rollover
+        rollover_3 <= rollover_2;
+        rollover_4 <= rollover_3 | rollover_eob; // rollover_4 is high if rollover_3 or rollover_eob is high
+        rollover_5 <= rollover_4; rollover_6 <= rollover_5; // Delayed versions of rollover_4
+        rollover_7 <= rollover_6; eob_1 <= end_of_block_output; // eob_1 from end_of_block_output
+        eob_2 <= eob_1; eob_3 <= eob_2; eob_4 <= eob_3; // Delayed versions of eob_1
+        eob_early_out_enable <= y_out_enable & y_out_enable_1 & eob_2; // Enables early EOB output
+    end
+end
 
-    // Instance of the pre_fifo module (generates Y, Cb, Cr data and ORC)
-    pre_fifo u14(
-        .clk(clk),
-        .rst(rst),
-        .enable(enable),
-        .data_in(data_in),
-        .cr_JPEG_bitstream(cr_JPEG_bitstream),
-        .cr_data_ready(cr_data_ready),
-        .cr_orc(cr_orc),
-        .cb_JPEG_bitstream(cb_JPEG_bitstream),
-        .cb_data_ready(cb_data_ready),
-        .cb_orc(cb_orc),
-        .y_JPEG_bitstream(y_JPEG_bitstream),
-        .y_data_ready(y_data_ready),
-        .y_orc(y_orc),
-        .y_eob_output(end_of_block_output),
-        .y_eob_empty(y_eob_empty),
-        .cb_eob_empty(cb_eob_empty),
-        .cr_eob_empty(cr_eob_empty)
-    );
+// Sequential logic for rollover based on bits_mux selection and enable signals
+always @(posedge clk) begin
+    case (bits_mux)
+        3'b001:  rollover <= y_out_enable_1 & !eob_4 & !eob_early_out_enable; // Y component
+        3'b010:  rollover <= cb_out_enable_1 & cb_out_enable; // Cb component
+        3'b100:  rollover <= cr_out_enable_1 & cr_out_enable; // Cr component
+        default: rollover <= y_out_enable_1 & !eob_4; // Default to Y component
+    endcase
+end
 
-    // Two instances of 32-bit synchronous FIFOs for Cb data (for double buffering)
-    sync_fifo_32 u15( // Cb FIFO Instance 1
-        .clk(clk),
-        .rst(rst),
-        .read_req(cb_read_req_out1),      // Muxed read request
-        .write_data(cb_JPEG_bitstream_sel), // Muxed write data
-        .write_enable(cb_write_enable1), // Muxed write enable
-        .read_data(cb_bits_out1),
-        .fifo_empty(cb_fifo_empty1),
-        .rdata_valid(cb_out_enable1)
-    );
+// Sequential logic for orc (Y component's orc)
+always @(posedge clk) begin
+    if (rst)
+        orc <= 5'b0;
+    else if (enable_20)
+        orc <= orc_cr + cr_orc_1;
+end
 
-    sync_fifo_32 u25( // Cb FIFO Instance 2
-        .clk(clk),
-        .rst(rst),
-        .read_req(cb_read_req_out2),
-        .write_data(cb_JPEG_bitstream_sel),
-        .write_enable(cb_write_enable2),
-        .read_data(cb_bits_out2),
-        .fifo_empty(cb_fifo_empty2),
-        .rdata_valid(cb_out_enable2)
-    );
+// Sequential logic for orc_cb (Cb component's orc)
+always @(posedge clk) begin
+    if (rst)
+        orc_cb <= 5'b0;
+    else if (eob_1)
+        orc_cb <= orc + y_orc_1;
+end
 
-    // Two instances of 32-bit synchronous FIFOs for Cr data (for double buffering)
-    sync_fifo_32 u16( // Cr FIFO Instance 1
-        .clk(clk),
-        .rst(rst),
-        .read_req(cr_read_req_out1),
-        .write_data(cr_JPEG_bitstream_sel),
-        .write_enable(cr_write_enable1),
-        .read_data(cr_bits_out1),
-        .fifo_empty(cr_fifo_empty1),
-        .rdata_valid(cr_out_enable1)
-    );
+// Sequential logic for orc_cr (Cr component's orc)
+always @(posedge clk) begin
+    if (rst)
+        orc_cr <= 5'b0;
+    else if (enable_5)
+        orc_cr <= orc_cb + cb_orc_1;
+end
 
-    sync_fifo_32 u24( // Cr FIFO Instance 2
-        .clk(clk),
-        .rst(rst),
-        .read_req(cr_read_req_out2),
-        .write_data(cr_JPEG_bitstream_sel),
-        .write_enable(cr_write_enable2),
-        .read_data(cr_bits_out2),
-        .fifo_empty(cr_fifo_empty2),
-        .rdata_valid(cr_out_enable2)
-    );
+// Sequential logic for delayed out_enable signals (cr, cb, y)
+always @(posedge clk) begin
+    if (rst) begin
+        cr_out_enable_1 <= 1'b0; cb_out_enable_1 <= 1'b0; y_out_enable_1 <= 1'b0;
+    end else begin
+        cr_out_enable_1 <= cr_out_enable;
+        cb_out_enable_1 <= cb_out_enable;
+        y_out_enable_1 <= y_out_enable;
+    end
+end
 
-    // Single instance of 32-bit synchronous FIFO for Y data
-    sync_fifo_32 u17(
-        .clk(clk),
-        .rst(rst),
-        .read_req(y_read_req),
-        .write_data(y_JPEG_bitstream),
-        .write_enable(y_write_enable),
-        .read_data(y_bits_out),
-        .fifo_empty(y_fifo_empty),
-        .rdata_valid(y_out_enable)
-    );
+// Sequential logic for jpeg: selects the appropriate bitstream based on bits_mux
+always @(posedge clk) begin
+    case (bits_mux)
+        3'b001:  jpeg <= y_bits_out; // Y component bitstream
+        3'b010:  jpeg <= cb_bits_out; // Cb component bitstream
+        3'b100:  jpeg <= cr_bits_out; // Cr component bitstream
+        default: jpeg <= y_bits_out; // Default to Y component bitstream
+    endcase
+end
 
-    
+// Sequential logic for bits_ready: indicates if the selected component's bits are ready
+always @(posedge clk) begin
+    case (bits_mux)
+        3'b001:  bits_ready <= y_out_enable; // Y component
+        3'b010:  bits_ready <= cb_out_enable; // Cb component
+        3'b100:  bits_ready <= cr_out_enable; // Cr component
+        default: bits_ready <= y_out_enable; // Default to Y component
+    endcase
+end
+
+// Sequential logic for sorc_reg: selects the appropriate orc value based on bits_mux
+always @(posedge clk) begin
+    case (bits_mux)
+        3'b001:  sorc_reg <= orc; // Y component orc
+        3'b010:  sorc_reg <= orc_cb; // Cb component orc
+        3'b100:  sorc_reg <= orc_cr; // Cr component orc
+        default: sorc_reg <= orc; // Default to Y component orc
+    endcase
+end
+
+// Sequential logic for roll_orc_reg: selects the appropriate orc value for rollover based on old_orc_mux
+always @(posedge clk) begin
+    case (old_orc_mux)
+        3'b001:  roll_orc_reg <= orc; // Y component orc
+        3'b010:  roll_orc_reg <= orc_cb; // Cb component orc
+        3'b100:  roll_orc_reg <= orc_cr; // Cr component orc
+        default: roll_orc_reg <= orc; // Default to Y component orc
+    endcase
+end
+
+// Sequential logic for orc_reg: selects the appropriate orc value based on bits_mux
+always @(posedge clk) begin
+    case (bits_mux)
+        3'b001:  orc_reg <= orc; // Y component orc
+        3'b010:  orc_reg <= orc_cb; // Cb component orc
+        3'b100:  orc_reg <= orc_cr; // Cr component orc
+        default: orc_reg <= orc; // Default to Y component orc
+    endcase
+end
+
+// Sequential logic for old_orc_reg: selects the appropriate orc value based on old_orc_mux
+always @(posedge clk) begin
+    case (old_orc_mux)
+        3'b001:  old_orc_reg <= orc_cr; // Cr component orc
+        3'b010:  old_orc_reg <= orc;    // Y component orc
+        3'b100:  old_orc_reg <= orc_cb; // Cb component orc
+        default: old_orc_reg <= orc_cr; // Default to Cr component orc
+    endcase
+end
+
+// Sequential logic for bits_mux: controls which component (Y, Cb, Cr) is currently being processed
+always @(posedge clk) begin
+    if (rst)
+        bits_mux <= 3'b001; // Y component (initial state)
+    else if (enable_3)
+        bits_mux <= 3'b010; // Cb component
+    else if (enable_19)
+        bits_mux <= 3'b100; // Cr component
+    else if (enable_35)
+        bits_mux <= 3'b001; // Y component (wrap around)
+end
+
+// Sequential logic for old_orc_mux: controls which old orc value is used for rollover
+always @(posedge clk) begin
+    if (rst)
+        old_orc_mux <= 3'b001; // Y component (initial state)
+    else if (enable_1)
+        old_orc_mux <= 3'b010; // Cb component
+    else if (enable_6)
+        old_orc_mux <= 3'b100; // Cr component
+    else if (enable_22)
+        old_orc_mux <= 3'b001; // Y component (wrap around)
+end
+
+// Sequential logic for read_mux: controls which FIFO (Y, Cb, Cr) is being read from
+always @(posedge clk) begin
+    if (rst)
+        read_mux <= 3'b001; // Y component (initial state)
+    else if (enable_1)
+        read_mux <= 3'b010; // Cb component
+    else if (enable_17)
+        read_mux <= 3'b100; // Cr component
+    else if (enable_33)
+        read_mux <= 3'b001; // Y component (wrap around)
+end
+
+// Sequential logic for delayed cr_orc_1, cb_orc_1, y_orc_1: capture orc values at EOB
+always @(posedge clk) begin
+    if (rst) begin
+        cr_orc_1 <= 5'b0; cb_orc_1 <= 5'b0; y_orc_1 <= 5'b0;
+    end else if (end_of_block_output) begin
+        cr_orc_1 <= cr_orc;
+        cb_orc_1 <= cb_orc;
+        y_orc_1 <= y_orc;
+    end
+end
+
+// Sequential logic for jpeg_ro_5 and edge_ro_5: shifting and decrementing for rollover
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_ro_5 <= 32'b0; edge_ro_5 <= 5'b0;
+    end else if (br_5) begin
+        jpeg_ro_5 <= (edge_ro_4 <= 5'd1) ? jpeg_ro_4 << 1 : jpeg_ro_4; // Shift left by 1 if edge_ro_4 <= 1
+        edge_ro_5 <= (edge_ro_4 <= 5'd1) ? edge_ro_4 : edge_ro_4 - 5'd1; // Decrement edge_ro_4
+    end
+end
+
+// Sequential logic for jpeg_5, orc_5, jpeg_ro_4, edge_ro_4: shifting and decrementing
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_5 <= 32'b0; orc_5 <= 5'b0; jpeg_ro_4 <= 32'b0; edge_ro_4 <= 5'b0;
+    end else if (br_4) begin
+        jpeg_5 <= (orc_4 >= 5'd1) ? jpeg_4 >> 1 : jpeg_4; // Shift right by 1 if orc_4 >= 1
+        orc_5 <= (orc_4 >= 5'd1) ? orc_4 - 5'd1 : orc_4; // Decrement orc_4
+        jpeg_ro_4 <= (edge_ro_3 <= 5'd2) ? jpeg_ro_3 << 2 : jpeg_ro_3; // Shift left by 2 if edge_ro_3 <= 2
+        edge_ro_4 <= (edge_ro_3 <= 5'd2) ? edge_ro_3 : edge_ro_3 - 5'd2; // Decrement edge_ro_3 by 2
+    end
+end
+
+// Sequential logic for jpeg_4, orc_4, jpeg_ro_3, edge_ro_3: shifting and decrementing
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_4 <= 32'b0; orc_4 <= 5'b0; jpeg_ro_3 <= 32'b0; edge_ro_3 <= 5'b0;
+    end else if (br_3) begin
+        jpeg_4 <= (orc_3 >= 5'd2) ? jpeg_3 >> 2 : jpeg_3; // Shift right by 2 if orc_3 >= 2
+        orc_4 <= (orc_3 >= 5'd2) ? orc_3 - 5'd2 : orc_3; // Decrement orc_3 by 2
+        jpeg_ro_3 <= (edge_ro_2 <= 5'd4) ? jpeg_ro_2 << 4 : jpeg_ro_2; // Shift left by 4 if edge_ro_2 <= 4
+        edge_ro_3 <= (edge_ro_2 <= 5'd4) ? edge_ro_2 : edge_ro_2 - 5'd4; // Decrement edge_ro_2 by 4
+    end
+end
+
+// Sequential logic for jpeg_3, orc_3, jpeg_ro_2, edge_ro_2: shifting and decrementing
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_3 <= 32'b0; orc_3 <= 5'b0; jpeg_ro_2 <= 32'b0; edge_ro_2 <= 5'b0;
+    end else if (br_2) begin
+        jpeg_3 <= (orc_2 >= 5'd4) ? jpeg_2 >> 4 : jpeg_2; // Shift right by 4 if orc_2 >= 4
+        orc_3 <= (orc_2 >= 5'd4) ? orc_2 - 5'd4 : orc_2; // Decrement orc_2 by 4
+        jpeg_ro_2 <= (edge_ro_1 <= 5'd8) ? jpeg_ro_1 << 8 : jpeg_ro_1; // Shift left by 8 if edge_ro_1 <= 8
+        edge_ro_2 <= (edge_ro_1 <= 5'd8) ? edge_ro_1 : edge_ro_1 - 5'd8; // Decrement edge_ro_1 by 8
+    end
+end
+
+// Sequential logic for jpeg_2, orc_2, jpeg_ro_1, edge_ro_1: shifting and decrementing
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_2 <= 32'b0; orc_2 <= 5'b0; jpeg_ro_1 <= 32'b0; edge_ro_1 <= 5'b0;
+    end else if (br_1) begin
+        jpeg_2 <= (orc_1 >= 5'd8) ? jpeg_1 >> 8 : jpeg_1; // Shift right by 8 if orc_1 >= 8
+        orc_2 <= (orc_1 >= 5'd8) ? orc_1 - 5'd8 : orc_1; // Decrement orc_1 by 8
+        jpeg_ro_1 <= (orc_reg_delay <= 5'd16) ? jpeg_delay << 16 : jpeg_delay; // Shift left by 16 if orc_reg_delay <= 16
+        edge_ro_1 <= (orc_reg_delay <= 5'd16) ? orc_reg_delay : orc_reg_delay - 5'd16; // Decrement orc_reg_delay by 16
+    end
+end
+
+// Sequential logic for jpeg_1, orc_1, jpeg_delay, orc_reg_delay: shifting and delaying
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_1 <= 32'b0; orc_1 <= 5'b0; jpeg_delay <= 32'b0; orc_reg_delay <= 5'b0;
+    end else if (bits_ready) begin
+        jpeg_1 <= (orc_reg >= 5'd16) ? jpeg >> 16 : jpeg; // Shift right by 16 if orc_reg >= 16
+        orc_1 <= (orc_reg >= 5'd16) ? orc_reg - 5'd16 : orc_reg; // Decrement orc_reg by 16
+        jpeg_delay <= jpeg; // Delay jpeg
+        orc_reg_delay <= orc_reg; // Delay orc_reg
+    end
+end
+
+// Sequential logic for various enable signals (delayed versions of end_of_block_output)
+always @(posedge clk) begin
+    if (rst) begin
+        enable_1 <= 1'b0; enable_2 <= 1'b0; enable_3 <= 1'b0; enable_4 <= 1'b0; enable_5 <= 1'b0;
+        enable_6 <= 1'b0; enable_7 <= 1'b0; enable_8 <= 1'b0; enable_9 <= 1'b0; enable_10 <= 1'b0;
+        enable_11 <= 1'b0; enable_12 <= 1'b0; enable_13 <= 1'b0; enable_14 <= 1'b0; enable_15 <= 1'b0;
+        enable_16 <= 1'b0; enable_17 <= 1'b0; enable_18 <= 1'b0; enable_19 <= 1'b0; enable_20 <= 1'b0;
+        enable_21 <= 1'b0; enable_22 <= 1'b0; enable_23 <= 1'b0; enable_24 <= 1'b0; enable_25 <= 1'b0;
+        enable_26 <= 1'b0; enable_27 <= 1'b0; enable_28 <= 1'b0; enable_29 <= 1'b0; enable_30 <= 1'b0;
+        enable_31 <= 1'b0; enable_32 <= 1'b0; enable_33 <= 1'b0; enable_34 <= 1'b0; enable_35 <= 1'b0;
+    end else begin
+        enable_1 <= end_of_block_output; enable_2 <= enable_1; // Delayed versions of end_of_block_output
+        enable_3 <= enable_2; enable_4 <= enable_3; enable_5 <= enable_4;
+        enable_6 <= enable_5; enable_7 <= enable_6; enable_8 <= enable_7;
+        enable_9 <= enable_8; enable_10 <= enable_9; enable_11 <= enable_10;
+        enable_12 <= enable_11; enable_13 <= enable_12; enable_14 <= enable_13;
+        enable_15 <= enable_14; enable_16 <= enable_15; enable_17 <= enable_16;
+        enable_18 <= enable_17; enable_19 <= enable_18; enable_20 <= enable_19;
+        enable_21 <= enable_20;
+        enable_22 <= enable_21; enable_23 <= enable_22; enable_24 <= enable_23;
+        enable_25 <= enable_24; enable_26 <= enable_25; enable_27 <= enable_26;
+        enable_28 <= enable_27; enable_29 <= enable_28; enable_30 <= enable_29;
+        enable_31 <= enable_30;
+        enable_32 <= enable_31; enable_33 <= enable_32; enable_34 <= enable_33;
+        enable_35 <= enable_34;
+    end
+end
+
+// Sequential logic for JPEG_bitstream bits [31:0]
+// Each bit is set based on br_7 & rollover_6 or br_6 & static_orc_6 condition
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[31] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[31] <= jpeg_6[31];
+    else if (br_6 && static_orc_6 == 5'd0)
+        JPEG_bitstream[31] <= jpeg_6[31];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[30] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[30] <= jpeg_6[30];
+    else if (br_6 && static_orc_6 <= 5'd1)
+        JPEG_bitstream[30] <= jpeg_6[30];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[29] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[29] <= jpeg_6[29];
+    else if (br_6 && static_orc_6 <= 5'd2)
+        JPEG_bitstream[29] <= jpeg_6[29];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[28] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[28] <= jpeg_6[28];
+    else if (br_6 && static_orc_6 <= 5'd3)
+        JPEG_bitstream[28] <= jpeg_6[28];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[27] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[27] <= jpeg_6[27];
+    else if (br_6 && static_orc_6 <= 5'd4)
+        JPEG_bitstream[27] <= jpeg_6[27];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[26] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[26] <= jpeg_6[26];
+    else if (br_6 && static_orc_6 <= 5'd5)
+        JPEG_bitstream[26] <= jpeg_6[26];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[25] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[25] <= jpeg_6[25];
+    else if (br_6 && static_orc_6 <= 5'd6)
+        JPEG_bitstream[25] <= jpeg_6[25];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[24] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[24] <= jpeg_6[24];
+    else if (br_6 && static_orc_6 <= 5'd7)
+        JPEG_bitstream[24] <= jpeg_6[24];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[23] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[23] <= jpeg_6[23];
+    else if (br_6 && static_orc_6 <= 5'd8)
+        JPEG_bitstream[23] <= jpeg_6[23];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[22] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[22] <= jpeg_6[22];
+    else if (br_6 && static_orc_6 <= 5'd9)
+        JPEG_bitstream[22] <= jpeg_6[22];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[21] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[21] <= jpeg_6[21];
+    else if (br_6 && static_orc_6 <= 5'd10)
+        JPEG_bitstream[21] <= jpeg_6[21];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[20] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[20] <= jpeg_6[20];
+    else if (br_6 && static_orc_6 <= 5'd11)
+        JPEG_bitstream[20] <= jpeg_6[20];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[19] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[19] <= jpeg_6[19];
+    else if (br_6 && static_orc_6 <= 5'd12)
+        JPEG_bitstream[19] <= jpeg_6[19];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[18] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[18] <= jpeg_6[18];
+    else if (br_6 && static_orc_6 <= 5'd13)
+        JPEG_bitstream[18] <= jpeg_6[18];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[17] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[17] <= jpeg_6[17];
+    else if (br_6 && static_orc_6 <= 5'd14)
+        JPEG_bitstream[17] <= jpeg_6[17];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[16] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[16] <= jpeg_6[16];
+    else if (br_6 && static_orc_6 <= 5'd15)
+        JPEG_bitstream[16] <= jpeg_6[16];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[15] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[15] <= jpeg_6[15];
+    else if (br_6 && static_orc_6 <= 5'd16)
+        JPEG_bitstream[15] <= jpeg_6[15];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[14] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[14] <= jpeg_6[14];
+    else if (br_6 && static_orc_6 <= 5'd17)
+        JPEG_bitstream[14] <= jpeg_6[14];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[13] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[13] <= jpeg_6[13];
+    else if (br_6 && static_orc_6 <= 5'd18)
+        JPEG_bitstream[13] <= jpeg_6[13];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[12] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[12] <= jpeg_6[12];
+    else if (br_6 && static_orc_6 <= 5'd19)
+        JPEG_bitstream[12] <= jpeg_6[12];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[11] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[11] <= jpeg_6[11];
+    else if (br_6 && static_orc_6 <= 5'd20)
+        JPEG_bitstream[11] <= jpeg_6[11];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[10] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[10] <= jpeg_6[10];
+    else if (br_6 && static_orc_6 <= 5'd21)
+        JPEG_bitstream[10] <= jpeg_6[10];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[9] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[9] <= jpeg_6[9];
+    else if (br_6 && static_orc_6 <= 5'd22)
+        JPEG_bitstream[9] <= jpeg_6[9];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[8] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[8] <= jpeg_6[8];
+    else if (br_6 && static_orc_6 <= 5'd23)
+        JPEG_bitstream[8] <= jpeg_6[8];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[7] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[7] <= jpeg_6[7];
+    else if (br_6 && static_orc_6 <= 5'd24)
+        JPEG_bitstream[7] <= jpeg_6[7];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[6] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[6] <= jpeg_6[6];
+    else if (br_6 && static_orc_6 <= 5'd25)
+        JPEG_bitstream[6] <= jpeg_6[6];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[5] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[5] <= jpeg_6[5];
+    else if (br_6 && static_orc_6 <= 5'd26)
+        JPEG_bitstream[5] <= jpeg_6[5];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[4] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[4] <= jpeg_6[4];
+    else if (br_6 && static_orc_6 <= 5'd27)
+        JPEG_bitstream[4] <= jpeg_6[4];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[3] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[3] <= jpeg_6[3];
+    else if (br_6 && static_orc_6 <= 5'd28)
+        JPEG_bitstream[3] <= jpeg_6[3];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[2] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[2] <= jpeg_6[2];
+    else if (br_6 && static_orc_6 <= 5'd29)
+        JPEG_bitstream[2] <= jpeg_6[2];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[1] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[1] <= jpeg_6[1];
+    else if (br_6 && static_orc_6 <= 5'd30)
+        JPEG_bitstream[1] <= jpeg_6[1];
+end
+
+always @(posedge clk) begin
+    if (rst)
+        JPEG_bitstream[0] <= 1'b0;
+    else if (br_7 & rollover_6)
+        JPEG_bitstream[0] <= jpeg_6[0];
+    else if (br_6 && static_orc_6 <= 5'd31)
+        JPEG_bitstream[0] <= jpeg_6[0];
+end
+
+// Sequential logic for jpeg_6: combines jpeg_ro_5 and jpeg_5 based on rollover_5 and static_orc_5
+always @(posedge clk) begin
+    if (rst) begin
+        jpeg_6 <= 32'b0;
+    end else if (br_5 | br_6) begin
+        // Each bit of jpeg_6 is set based on a conditional logic involving rollover_5, static_orc_5, jpeg_ro_5, and jpeg_5
+        jpeg_6[31] <= (rollover_5 & static_orc_5 > 5'd0) ? jpeg_ro_5[31] : jpeg_5[31];
+        jpeg_6[30] <= (rollover_5 & static_orc_5 > 5'd1) ? jpeg_ro_5[30] : jpeg_5[30];
+        jpeg_6[29] <= (rollover_5 & static_orc_5 > 5'd2) ? jpeg_ro_5[29] : jpeg_5[29];
+        jpeg_6[28] <= (rollover_5 & static_orc_5 > 5'd3) ? jpeg_ro_5[28] : jpeg_5[28];
+        jpeg_6[27] <= (rollover_5 & static_orc_5 > 5'd4) ? jpeg_ro_5[27] : jpeg_5[27];
+        jpeg_6[26] <= (rollover_5 & static_orc_5 > 5'd5) ? jpeg_ro_5[26] : jpeg_5[26];
+        jpeg_6[25] <= (rollover_5 & static_orc_5 > 5'd6) ? jpeg_ro_5[25] : jpeg_5[25];
+        jpeg_6[24] <= (rollover_5 & static_orc_5 > 5'd7) ? jpeg_ro_5[24] : jpeg_5[24];
+        jpeg_6[23] <= (rollover_5 & static_orc_5 > 5'd8) ? jpeg_ro_5[23] : jpeg_5[23];
+        jpeg_6[22] <= (rollover_5 & static_orc_5 > 5'd9) ? jpeg_ro_5[22] : jpeg_5[22];
+        jpeg_6[21] <= (rollover_5 & static_orc_5 > 5'd10) ? jpeg_ro_5[21] : jpeg_5[21];
+        jpeg_6[20] <= (rollover_5 & static_orc_5 > 5'd11) ? jpeg_ro_5[20] : jpeg_5[20];
+        jpeg_6[19] <= (rollover_5 & static_orc_5 > 5'd12) ? jpeg_ro_5[19] : jpeg_5[19];
+        jpeg_6[18] <= (rollover_5 & static_orc_5 > 5'd13) ? jpeg_ro_5[18] : jpeg_5[18];
+        jpeg_6[17] <= (rollover_5 & static_orc_5 > 5'd14) ? jpeg_ro_5[17] : jpeg_5[17];
+        jpeg_6[16] <= (rollover_5 & static_orc_5 > 5'd15) ? jpeg_ro_5[16] : jpeg_5[16];
+        jpeg_6[15] <= (rollover_5 & static_orc_5 > 5'd16) ? jpeg_ro_5[15] : jpeg_5[15];
+        jpeg_6[14] <= (rollover_5 & static_orc_5 > 5'd17) ? jpeg_ro_5[14] : jpeg_5[14];
+        jpeg_6[13] <= (rollover_5 & static_orc_5 > 5'd18) ? jpeg_ro_5[13] : jpeg_5[13];
+        jpeg_6[12] <= (rollover_5 & static_orc_5 > 5'd19) ? jpeg_ro_5[12] : jpeg_5[12];
+        jpeg_6[11] <= (rollover_5 & static_orc_5 > 5'd20) ? jpeg_ro_5[11] : jpeg_5[11];
+        jpeg_6[10] <= (rollover_5 & static_orc_5 > 5'd21) ? jpeg_ro_5[10] : jpeg_5[10];
+        jpeg_6[9] <= (rollover_5 & static_orc_5 > 5'd22) ? jpeg_ro_5[9] : jpeg_5[9];
+        jpeg_6[8] <= (rollover_5 & static_orc_5 > 5'd23) ? jpeg_ro_5[8] : jpeg_5[8];
+        jpeg_6[7] <= (rollover_5 & static_orc_5 > 5'd24) ? jpeg_ro_5[7] : jpeg_5[7];
+        jpeg_6[6] <= (rollover_5 & static_orc_5 > 5'd25) ? jpeg_ro_5[6] : jpeg_5[6];
+        jpeg_6[5] <= (rollover_5 & static_orc_5 > 5'd26) ? jpeg_ro_5[5] : jpeg_5[5];
+        jpeg_6[4] <= (rollover_5 & static_orc_5 > 5'd27) ? jpeg_ro_5[4] : jpeg_5[4];
+        jpeg_6[3] <= (rollover_5 & static_orc_5 > 5'd28) ? jpeg_ro_5[3] : jpeg_5[3];
+        jpeg_6[2] <= (rollover_5 & static_orc_5 > 5'd29) ? jpeg_ro_5[2] : jpeg_5[2];
+        jpeg_6[1] <= (rollover_5 & static_orc_5 > 5'd30) ? jpeg_ro_5[1] : jpeg_5[1];
+        jpeg_6[0] <= jpeg_5[0]; // Bit 0 is always from jpeg_5
+    end
+end
+
+endmodule
