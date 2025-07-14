@@ -1,4 +1,4 @@
-/*
+/*----------------------------------------------------------------------------------
 Module Name : cr_dct
 Description : This module performs an 8x8 Discrete Cosine Transform (DCT) on 8-bit pixel
 data for the Cr (chrominance-red) component of a JPEG image. It processes incoming pixel values and 
