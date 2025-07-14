@@ -8,18 +8,6 @@ Description:
       • Outputs bitstreams and control signals for each color channel.
   - Works in JPEG encoding pipeline after RGB input but before FIFO muxing.
   - Enables pipelined architecture for Y/Cb/Cr encoding.
-
-Inputs:
-  - clk, rst         : Clock and active-high reset.
-  - enable           : Global enable signal for RGB conversion.
-  - data_in [23:0]   : 8-bit R, G, B (in one 24-bit input).
-
-Outputs:
-  - y/cb/cr_JPEG_bitstream [31:0] : Encoded bitstreams from Y/Cb/Cr channels.
-  - y/cb/cr_data_ready            : Flags indicating valid bitstream data.
-  - y/cb/cr_orc [4:0]             : Output remaining count for each channel.
-  - y_eob_output                  : Indicates end of block for Y channel.
-  - y/cb/cr_eob_empty             : Flags indicating EOB FIFO status (empty).
 --------------------------------------------------------------------------------
 */
 
