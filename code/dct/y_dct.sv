@@ -1,5 +1,4 @@
-/*
-----------------------------------------------------------------------------------
+/*----------------------------------------------------------------------------------
 Module Name : y_dct
  Description : This module performs an 8x8 Discrete Cosine Transform (DCT) on 8-bit pixel
 data for the Y (luminance) component of a JPEG image. It receives a stream 
