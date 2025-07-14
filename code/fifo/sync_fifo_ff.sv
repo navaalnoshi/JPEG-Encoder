@@ -1,24 +1,12 @@
 /*
 --------------------------------------------------------------------------------
-Module: sync_fifo_ff (SystemVerilog)
+Module: sync_fifo_ff 
 Description:
   - Synchronous FIFO with 91-bit wide data for JPEG bitstream stages.
   - Stores encoded blocks and outputs them sequentially for FF checking.
   - Supports special "rollover_write" case to add delay after FF escaping.
   - FIFO depth: 16 entries.
   - Outputs valid flag and FIFO empty signal.
-
-Inputs:
-  - clk, rst              : Clock and active-high reset.
-  - read_req              : Read request from consumer.
-  - write_data [90:0]     : Data to be written into FIFO.
-  - write_enable          : Write enable signal.
-  - rollover_write        : Special condition to delay writing by 1 cycle.
-
-Outputs:
-  - read_data [90:0]      : Data read from FIFO.
-  - fifo_empty            : Indicates FIFO is empty.
-  - rdata_valid           : Output data is valid and can be used.
 --------------------------------------------------------------------------------
 */
 
