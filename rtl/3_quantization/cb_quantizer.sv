@@ -1,6 +1,6 @@
-
-
-
+// Copyright 2025 Maktab-e-Digital Systems Lahore.
+// Licensed under the Apache License, Version 2.0, see LICENSE file for details.
+// SPDX-License-Identifier: Apache-2.0
 // Description:
 //    This module performs quantization on an 8x8 matrix of Cb DCT coefficients.
 //    These coefficients are the result of applying 2D DCT to a chroma (Cb) block.
@@ -12,151 +12,122 @@
 //    - Stage 2: Multiplication with quantization factors
 //    - Stage 3: Pipelining of intermediate result
 //    - Stage 4: Output rounding and quantization result
-
+// Author:Navaal Noshi
+// Date:11th July,2025.
 `timescale 1ns / 100ps
 
 module cb_quantizer #(
-    // Quantization values (can be changed for different quantization levels)
-    // JPEG standard Cb/Cr quantization matrix example (simplified for demonstration)
-    // The default values here are '1' for maximum precision (minimal compression)
-    parameter int Q_MATRIX [8][8] = {
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1, 1}
-    }
+    parameter logic [63:0] CB_Q_MATRIX [0:63] = '{default: 64'd1}
 ) (
-    input  logic          clk,
-    input  logic          rst,
-    input  logic          enable,
-    input  logic [10:0]   Z [8][8],     // 8x8 matrix of Cb DCT coefficients
-    output logic [10:0]   Q [8][8],     // 8x8 matrix of quantized Cb coefficients
-    output logic          out_enable    // Output enable signal
+    input  logic        clk,
+    input  logic        rst,
+    input  logic        enable,
+    input  logic [10:0] Z [7:0][7:0],        // Input DCT Coefficients
+    output logic [10:0] Q [7:0][7:0],        // Output Quantized Coefficients
+    output logic        out_enable           // Output enable after 3-stage pipeline
 );
 
-    // Precomputed reciprocal values (scaled by 4096 = 2^12) to replace division
-    // QQ[i][j] = floor(4096 / Q_MATRIX[i][j])
-    localparam int C_SHIFT_AMOUNT = 12; // Corresponding to 4096 (2^12)
-    localparam int C_ROUND_ADD = 1 << (C_SHIFT_AMOUNT - 1); // 2048 for rounding
+    // Internal pipeline registers
+    logic signed [31:0] Z_int     [7:0][7:0];  // Stage 1
+    logic signed [22:0] Z_temp    [7:0][7:0];  // Stage 2
+    logic signed [22:0] Z_temp_1  [7:0][7:0];  // Stage 3
 
-    // Precompute reciprocal quantization factors at compile time
-    genvar i, j;
+    // Quantization multipliers (4096 / Q[i][j])
+    logic [12:0] QM [7:0][7:0];
+
+    // Pipeline control
+    logic enable_1, enable_2;
+
+    // -------------------------------------------------------------------------
+    // Stage 0: Initialize Quantization Multiplier Matrix (4096 / Q[i][j])
+    // -------------------------------------------------------------------------
+    initial begin
+        for (int i = 0; i < 8; i++) begin
+            for (int j = 0; j < 8; j++) begin
+                if (CB_Q_MATRIX[i*8 + j] == 0)
+                    QM[i][j] = 13'd0;
+                else
+                    QM[i][j] = 4096 / CB_Q_MATRIX[i*8 + j];
+            end
+        end
+    end
+
+    // -------------------------------------------------------------------------
+    // Stage 1: Sign-extension and input register (Z_int)
+    // -------------------------------------------------------------------------
     generate
-        for (i = 0; i < 8; i++) begin : gen_qq_factors
-            for (j = 0; j < 8; j++) begin : gen_qq_elements
-                // QM_MATRIX is 13 bits to hold values up to 4096 (when Q_MATRIX element is 1)
-                localparam logic [C_SHIFT_AMOUNT:0] QM_MATRIX_VAL = (Q_MATRIX[i][j] == 0) ? 0 : (4096 / Q_MATRIX[i][j]);
-                logic [C_SHIFT_AMOUNT:0] QM_matrix_reg; // Register for QM_MATRIX_VAL
-                initial QM_matrix_reg = QM_MATRIX_VAL; // Initialize with parameter value
+        for (genvar i = 0; i < 8; i++) begin : gen_stage1_row
+            for (genvar j = 0; j < 8; j++) begin : gen_stage1_col
+                always_ff @(posedge clk or posedge rst) begin
+                    if (rst)
+                        Z_int[i][j] <= 32'sd0;
+                    else if (enable)
+                        Z_int[i][j] <= {{21{Z[i][j][10]}}, Z[i][j]};
+                end
             end
         end
     endgenerate
 
-    // Pipelined intermediate signals
-    logic signed [10:0]   Z_s_reg [8][8];       // Stage 1: Signed input
-    logic signed [23:0]   Z_mul_reg [8][8];     // Stage 2: Product of Z_s_reg and QM_matrix (11 bits + 13 bits = 24 bits)
-    logic signed [23:0]   Z_pipe_reg [8][8];    // Stage 3: Pipelined multiplication result
-
-    // Pipelined enable signals
-    logic enable_1, enable_2, enable_3;
-
-    // ---
-    // Stage 1: Input latching and sign extension
-    // ---
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Z_s_reg[i][j] <= 0;
-                end
-            end
-        end else if (enable) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    // $signed() casts Z to signed, then assigned to signed Z_s_reg, handled correctly
-                    Z_s_reg[i][j] <= $signed(Z[i][j]);
+    // -------------------------------------------------------------------------
+    // Stage 2: Multiply Z_int with quantization multipliers (Z_temp)
+    // -------------------------------------------------------------------------
+    generate
+        for (genvar i = 0; i < 8; i++) begin : gen_stage2_row
+            for (genvar j = 0; j < 8; j++) begin : gen_stage2_col
+                always_ff @(posedge clk or posedge rst) begin
+                    if (rst)
+                        Z_temp[i][j] <= 23'sd0;
+                    else if (enable_1)
+                        Z_temp[i][j] <= Z_int[i][j] * QM[i][j];
                 end
             end
         end
-    end
+    endgenerate
 
-    // ---
-    // Stage 2: Multiply with precomputed quantization factors
-    // ---
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Z_mul_reg[i][j] <= 0;
-                end
-            end
-        end else if (enable_1) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Z_mul_reg[i][j] <= $signed(Z_s_reg[i][j]) * QM_MATRIX_VAL; // QM_MATRIX_VAL is implicitly positive
+    // -------------------------------------------------------------------------
+    // Stage 3: Pipeline Z_temp to Z_temp_1
+    // -------------------------------------------------------------------------
+    generate
+        for (genvar i = 0; i < 8; i++) begin : gen_stage3_row
+            for (genvar j = 0; j < 8; j++) begin : gen_stage3_col
+                always_ff @(posedge clk or posedge rst) begin
+                    if (rst)
+                        Z_temp_1[i][j] <= 23'sd0;
+                    else if (enable_2)
+                        Z_temp_1[i][j] <= Z_temp[i][j];
                 end
             end
         end
-    end
+    endgenerate
 
-    // ---
-    // Stage 3: Pipeline the intermediate result
-    // ---
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Z_pipe_reg[i][j] <= 0;
-                end
-            end
-        end else if (enable_2) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Z_pipe_reg[i][j] <= Z_mul_reg[i][j];
+    // -------------------------------------------------------------------------
+    // Stage 4: Final rounding and shift to produce quantized output (Q)
+    // -------------------------------------------------------------------------
+    generate
+        for (genvar i = 0; i < 8; i++) begin : gen_stage4_row
+            for (genvar j = 0; j < 8; j++) begin : gen_stage4_col
+                always_ff @(posedge clk or posedge rst) begin
+                    if (rst)
+                        Q[i][j] <= 11'sd0;
+                    else if (out_enable)
+                        Q[i][j] <= (Z_temp_1[i][j] + 2048) >>> 12;
                 end
             end
         end
-    end
+    endgenerate
 
-    // ---
-    // Stage 4: Right shift with rounding to produce quantized output
-    // ---
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    Q[i][j] <= 0;
-                end
-            end
-        end else if (enable_3) begin
-            for (i = 0; i < 8; i++) begin
-                for (j = 0; j < 8; j++) begin
-                    // Rounding: add 2048 (half of 4096) before arithmetic right shift
-                    // This implements "round half up" for positive numbers and "round half down" for negative numbers
-                    Q[i][j] <= ($signed(Z_pipe_reg[i][j]) + C_ROUND_ADD) >>> C_SHIFT_AMOUNT;
-                end
-            end
-        end
-    end
-
-    // ---
-    // Enable signal pipelining: tracks progress through pipeline stages
-    // ---
+    // -------------------------------------------------------------------------
+    // Pipeline control logic for enable signal propagation
+    // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             enable_1   <= 1'b0;
             enable_2   <= 1'b0;
-            enable_3   <= 1'b0;
             out_enable <= 1'b0;
         end else begin
             enable_1   <= enable;
             enable_2   <= enable_1;
-            enable_3   <= enable_2;
-            out_enable <= enable_3; // out_enable asserts when Q outputs are valid
+            out_enable <= enable_2;
         end
     end
 
