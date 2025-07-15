@@ -1,19 +1,18 @@
-/* ---------------------------------------------------------------------------
-Module: cb_quantizer
 
-Description:
-    This module performs quantization on an 8x8 matrix of Cb DCT coefficients.
-    These coefficients are the result of applying 2D DCT to a chroma (Cb) block.
-    Quantization reduces the precision of the DCT coefficients to achieve
-    lossy compression, which is a key part of JPEG encoding.
 
-    The module replaces division with multiplication (4096 / Q), using pre-computed
-    constants to reduce hardware cost. It implements a 4-stage pipeline:
-    - Stage 1: Input registration and sign-extension
-    - Stage 2: Multiplication with quantization factors
-    - Stage 3: Pipelining of intermediate result
-    - Stage 4: Output rounding and quantization result
---------------------------------------------------------------------------- */
+
+// Description:
+//    This module performs quantization on an 8x8 matrix of Cb DCT coefficients.
+//    These coefficients are the result of applying 2D DCT to a chroma (Cb) block.
+//    Quantization reduces the precision of the DCT coefficients to achieve
+//    lossy compression, which is a key part of JPEG encoding.The module replaces division 
+//    with multiplication (4096 / Q), using pre-computed constants to reduce hardware cost. 
+//    It implements a 4-stage pipeline:
+//    - Stage 1: Input registration and sign-extension
+//    - Stage 2: Multiplication with quantization factors
+//    - Stage 3: Pipelining of intermediate result
+//    - Stage 4: Output rounding and quantization result
+
 `timescale 1ns / 100ps
 
 module cb_quantizer #(
