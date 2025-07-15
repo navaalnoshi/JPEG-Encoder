@@ -50,7 +50,7 @@ module pre_fifo (
     // Output is packed as: [23:16] = Cr, [15:8] = Cb, [7:0] = Y
     // ------------------------------------------------------------------------
 
-    RGB2YCBCR u4 (
+    rgb2ycrcb u4 (
         .clk        (clk),
         .rst        (rst),
         .enable     (enable),
