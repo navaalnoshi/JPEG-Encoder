@@ -16,16 +16,6 @@
 //     - Stage 2: Rounding and clamping to [0, 255]
 //
 //   Outputs are registered and synchronized using delayed enable signals.
-//
-// Inputs:
-//   - clk        : Clock signal
-//   - rst        : Active-high synchronous reset
-//   - enable     : Enable signal to process new input pixel
-//   - data_in    : 24-bit RGB input {Blue[23:16], Green[15:8], Red[7:0]}
-//
-// Outputs:
-//   - data_out   : 24-bit YCbCr output {Cr[23:16], Cb[15:8], Y[7:0]}
-//   - enable_out : Indicates output data is valid (2-cycle latency)
 // -----------------------------------------------------------------------------
 
 `timescale 1ns / 100ps
