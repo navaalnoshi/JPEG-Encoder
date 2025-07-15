@@ -1,15 +1,17 @@
-/*----------------------------------------------------------------------------------
-Module Name : cbd_q_h
-Description : This module integrates the Discrete Cosine Transform (DCT), quantizer,
-and Huffman encoder modules for the **Cb (chrominance-blue)** component of the JPEG
-encoding pipeline. The operations performed include:
-  1. Applying 2D-DCT on an 8x8 input block
-  2. Quantizing the DCT coefficients using a chrominance-specific matrix
-  3. Huffman encoding the quantized values to produce a compressed JPEG stream
-
-This combined module outputs a 32-bit Huffman encoded JPEG stream and provides
-flags for data readiness and end-of-block status.
-----------------------------------------------------------------------------------*/
+// Copyright 2025 Maktab-e-Digital Systems Lahore.
+// Licensed under the Apache License, Version 2.0, see LICENSE file for details.
+// SPDX-License-Identifier: Apache-2.0
+// Description:
+//   This module integrates the Discrete Cosine Transform (DCT), quantizer,
+//   Y and Huffman encoder modules for the **Cb (chrominance-blue)** component of the JPEG
+//   encoding pipeline. The operations performed include:
+//   1. Applying 2D-DCT on an 8x8 input block
+//   2. Quantizing the DCT coefficients using a chrominance-specific matrix
+//   3. Huffman encoding the quantized values to produce a compressed JPEG stream
+//  This combined module outputs a 32-bit Huffman encoded JPEG stream and provides
+// flags for data readiness and end-of-block status.
+// Author:Navaal Noshi
+// Date:13th July,2025.
 
 `timescale 1ns / 100ps
 
