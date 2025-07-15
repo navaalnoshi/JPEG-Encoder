@@ -17,351 +17,178 @@ module y_dct (
     input  logic        enable,
     input  logic [7:0]  data_in,
 
-    output logic [10:0] Z11_final, Z12_final, Z13_final, Z14_final,
-    output logic [10:0] Z15_final, Z16_final, Z17_final, Z18_final,
-    output logic [10:0] Z21_final, Z22_final, Z23_final, Z24_final,
-    output logic [10:0] Z25_final, Z26_final, Z27_final, Z28_final,
-    output logic [10:0] Z31_final, Z32_final, Z33_final, Z34_final,
-    output logic [10:0] Z35_final, Z36_final, Z37_final, Z38_final,
-    output logic [10:0] Z41_final, Z42_final, Z43_final, Z44_final,
-    output logic [10:0] Z45_final, Z46_final, Z47_final, Z48_final,
-    output logic [10:0] Z51_final, Z52_final, Z53_final, Z54_final,
-    output logic [10:0] Z55_final, Z56_final, Z57_final, Z58_final,
-    output logic [10:0] Z61_final, Z62_final, Z63_final, Z64_final,
-    output logic [10:0] Z65_final, Z66_final, Z67_final, Z68_final,
-    output logic [10:0] Z71_final, Z72_final, Z73_final, Z74_final,
-    output logic [10:0] Z75_final, Z76_final, Z77_final, Z78_final,
-    output logic [10:0] Z81_final, Z82_final, Z83_final, Z84_final,
-    output logic [10:0] Z85_final, Z86_final, Z87_final, Z88_final,
+    output logic [10:0] Z11_final, Z12_final, Z13_final, Z14_final, Z15_final, Z16_final, Z17_final, Z18_final,
+    output logic [10:0] Z21_final, Z22_final, Z23_final, Z24_final, Z25_final, Z26_final, Z27_final, Z28_final,
+    output logic [10:0] Z31_final, Z32_final, Z33_final, Z34_final, Z35_final, Z36_final, Z37_final, Z38_final,
+    output logic [10:0] Z41_final, Z42_final, Z43_final, Z44_final, Z45_final, Z46_final, Z47_final, Z48_final,
+    output logic [10:0] Z51_final, Z52_final, Z53_final, Z54_final, Z55_final, Z56_final, Z57_final, Z58_final,
+    output logic [10:0] Z61_final, Z62_final, Z63_final, Z64_final, Z65_final, Z66_final, Z67_final, Z68_final,
+    output logic [10:0] Z71_final, Z72_final, Z73_final, Z74_final, Z75_final, Z76_final, Z77_final, Z78_final,
+    output logic [10:0] Z81_final, Z82_final, Z83_final, Z84_final, Z85_final, Z86_final, Z87_final, Z88_final,
 
     output logic        output_enable
 );
-    
-//--------------------------------------------------------------
-// Integers
-//--------------------------------------------------------------
-    
+
+// -----------------------------------------------------------------------------
+// Internal Constants and Variables
+// -----------------------------------------------------------------------------
 int T1, T21, T22, T23, T24, T25, T26, T27, T28, T31, T32, T33, T34, T52;
 int Ti1, Ti21, Ti22, Ti23, Ti24, Ti25, Ti26, Ti27, Ti28, Ti31, Ti32, Ti33, Ti34, Ti52;
+int Y2_mul_input, Y3_mul_input, Y4_mul_input, Y5_mul_input, Y6_mul_input, Y7_mul_input, Y8_mul_input;
+int Ti2_mul_input, Ti3_mul_input, Ti4_mul_input, Ti5_mul_input, Ti6_mul_input, Ti7_mul_input, Ti8_mul_input;
 
-//--------------------------------------------------------------
-// Intermediate Registers
-//--------------------------------------------------------------
-    
-logic [24:0] Y_temp_11;
-logic [24:0] Y11, Y21, Y31, Y41, Y51, Y61, Y71, Y81, Y11_final;
+// -----------------------------------------------------------------------------
+// Registers and Temporary Storage
+// -----------------------------------------------------------------------------
+logic [24:0] Y11, Y21, Y31, Y41, Y51, Y61, Y71, Y81;
+logic [24:0] Y21_final, Y31_final, Y41_final, Y51_final, Y61_final, Y71_final, Y81_final;
+logic [24:0] Y21_final_prev, Y31_final_prev, Y41_final_prev, Y51_final_prev, Y61_final_prev, Y71_final_prev, Y81_final_prev;
+logic [24:0] Y21_final_diff, Y31_final_diff, Y41_final_diff, Y51_final_diff, Y61_final_diff, Y71_final_diff, Y81_final_diff;
 
-logic [31:0] Y_temp_21, Y_temp_31, Y_temp_41, Y_temp_51;
-logic [31:0] Y_temp_61, Y_temp_71, Y_temp_81;
+logic [31:0] Y11_final_2, Y21_final_2, Y11_final_3, Y11_final_4, Y31_final_2, Y41_final_2, Y51_final_2, Y61_final_2, Y71_final_2, Y81_final_2;
+logic [12:0] Y11_final_1, Y21_final_1, Y31_final_1, Y41_final_1, Y51_final_1, Y61_final_1, Y71_final_1, Y81_final_1;
 
-logic [31:0] Z_temp_11, Z_temp_12, Z_temp_13, Z_temp_14;
-logic [31:0] Z_temp_15, Z_temp_16, Z_temp_17, Z_temp_18;
-logic [31:0] Z_temp_21, Z_temp_22, Z_temp_23, Z_temp_24;
-logic [31:0] Z_temp_25, Z_temp_26, Z_temp_27, Z_temp_28;
-logic [31:0] Z_temp_31, Z_temp_32, Z_temp_33, Z_temp_34;
-logic [31:0] Z_temp_35, Z_temp_36, Z_temp_37, Z_temp_38;
-logic [31:0] Z_temp_41, Z_temp_42, Z_temp_43, Z_temp_44;
-logic [31:0] Z_temp_45, Z_temp_46, Z_temp_47, Z_temp_48;
-logic [31:0] Z_temp_51, Z_temp_52, Z_temp_53, Z_temp_54;
-logic [31:0] Z_temp_55, Z_temp_56, Z_temp_57, Z_temp_58;
-logic [31:0] Z_temp_61, Z_temp_62, Z_temp_63, Z_temp_64;
-logic [31:0] Z_temp_65, Z_temp_66, Z_temp_67, Z_temp_68;
-logic [31:0] Z_temp_71, Z_temp_72, Z_temp_73, Z_temp_74;
-logic [31:0] Z_temp_75, Z_temp_76, Z_temp_77, Z_temp_78;
-logic [31:0] Z_temp_81, Z_temp_82, Z_temp_83, Z_temp_84;
-logic [31:0] Z_temp_85, Z_temp_86, Z_temp_87, Z_temp_88;
+logic [31:0] Z_temp[1:8][1:8];  // Replaces Z_temp_11 ... Z_temp_88
+logic [26:0] Z     [1:8][1:8];  // Replaces Z11 ... Z88
 
-logic [26:0] Z11, Z12, Z13, Z14, Z15, Z16, Z17, Z18;
-logic [26:0] Z21, Z22, Z23, Z24, Z25, Z26, Z27, Z28;
-logic [26:0] Z31, Z32, Z33, Z34, Z35, Z36, Z37, Z38;
-logic [26:0] Z41, Z42, Z43, Z44, Z45, Z46, Z47, Z48;
-logic [26:0] Z51, Z52, Z53, Z54, Z55, Z56, Z57, Z58;
-logic [26:0] Z61, Z62, Z63, Z64, Z65, Z66, Z67, Z68;
-logic [26:0] Z71, Z72, Z73, Z74, Z75, Z76, Z77, Z78;
-logic [26:0] Z81, Z82, Z83, Z84, Z85, Z86, Z87, Z88;
-
-logic [31:0] Y11_final_2, Y21_final_2, Y11_final_3, Y11_final_4, Y31_final_2, Y41_final_2;
-logic [31:0] Y51_final_2, Y61_final_2, Y71_final_2, Y81_final_2;
-
-logic [12:0] Y11_final_1, Y21_final_1, Y31_final_1, Y41_final_1;
-logic [12:0] Y51_final_1, Y61_final_1, Y71_final_1, Y81_final_1;
-
-logic [24:0] Y21_final, Y31_final, Y41_final, Y51_final;
-logic [24:0] Y61_final, Y71_final, Y81_final;
-
-logic [24:0] Y21_final_prev, Y21_final_diff;
-logic [24:0] Y31_final_prev, Y31_final_diff;
-logic [24:0] Y41_final_prev, Y41_final_diff;
-logic [24:0] Y51_final_prev, Y51_final_diff;
-logic [24:0] Y61_final_prev, Y61_final_diff;
-logic [24:0] Y71_final_prev, Y71_final_diff;
-logic [24:0] Y81_final_prev, Y81_final_diff;
-
-// Already declared as outputs above — don't re-declare them below as logic/reg again
-
-logic [2:0] count;
-logic [2:0] count_of, count_of_copy;
-
-logic count_1, count_3, count_4, count_5, count_6, count_7, count_8;
-logic count_9, count_10;
-logic enable_1;
-
+// -----------------------------------------------------------------------------
+// Control Logic
+// -----------------------------------------------------------------------------
+logic [2:0] count, count_of, count_of_copy;
+logic       count_1, count_3, count_4, count_5, count_6, count_7, count_8, count_9, count_10;
+logic       enable_1;
 logic [7:0] data_1;
 
-int Y2_mul_input, Y3_mul_input, Y4_mul_input, Y5_mul_input;
-int Y6_mul_input, Y7_mul_input, Y8_mul_input;
-int Ti2_mul_input, Ti3_mul_input, Ti4_mul_input, Ti5_mul_input;
-int Ti6_mul_input, Ti7_mul_input, Ti8_mul_input;
 
-always_ff @(posedge clk) begin
-    // DCT matrix entries
-    T1  = 5793;  // .3536
-    T21 = 8035;  // .4904
-    T22 = 6811;  // .4157
-    T23 = 4551;  // .2778
-    T24 = 1598;  // .0975
-    T25 = -1598; // -.0975
-    T26 = -4551; // -.2778
-    T27 = -6811; // -.4157
-    T28 = -8035; // -.4904
-    T31 = 7568;  // .4619
-    T32 = 3135;  // .1913
-    T33 = -3135; // -.1913
-    T34 = -7568; // -.4619
-    T52 = -5793; // -.3536
+// -----------------------------------------------------------------------------
+// Forward DCT Matrix Constants (scaled fixed-point representation)
+// -----------------------------------------------------------------------------
+localparam int T1  = 5793;   // ≈ 0.3536
+localparam int T21 = 8035;   // ≈ 0.4904
+localparam int T22 = 6811;   // ≈ 0.4157
+localparam int T23 = 4551;   // ≈ 0.2778
+localparam int T24 = 1598;   // ≈ 0.0975
+localparam int T25 = -1598;  // ≈ -0.0975
+localparam int T26 = -4551;  // ≈ -0.2778
+localparam int T27 = -6811;  // ≈ -0.4157
+localparam int T28 = -8035;  // ≈ -0.4904
+localparam int T31 = 7568;   // ≈ 0.4619
+localparam int T32 = 3135;   // ≈ 0.1913
+localparam int T33 = -3135;  // ≈ -0.1913
+localparam int T34 = -7568;  // ≈ -0.4619
+localparam int T52 = -5793;  // ≈ -0.3536
+
+// -----------------------------------------------------------------------------
+// Inverse DCT Matrix Constants (same values reused)
+// -----------------------------------------------------------------------------
+localparam int Ti1  = T1;
+localparam int Ti21 = T21;
+localparam int Ti22 = T22;
+localparam int Ti23 = T23;
+localparam int Ti24 = T24;
+localparam int Ti25 = T25;
+localparam int Ti26 = T26;
+localparam int Ti27 = T27;
+localparam int Ti28 = T28;
+localparam int Ti31 = T31;
+localparam int Ti32 = T32;
+localparam int Ti33 = T33;
+localparam int Ti34 = T34;
+localparam int Ti52 = T52;
+
+// -----------------------------------------------------------------------------
+// Signal Declarations (outside the always_ff block)
+// -----------------------------------------------------------------------------
+logic [31:0] Z_temp[1:8][1:8];     // replaces Z_temp_11 to Z_temp_88
+logic [31:0] Y_final[1:8];         // replaces Y11_final_4 to Y81_final_2
+int          Ti_mul_input[1:8];    // replaces Ti1 to Ti8_mul_input
+
+// -----------------------------------------------------------------------------
+// Combinational Assignment (before the always_ff block)
+// -----------------------------------------------------------------------------
+always_comb begin
+    Y_final[1] = Y11_final_4;
+    Y_final[2] = Y21_final_2;
+    Y_final[3] = Y31_final_2;
+    Y_final[4] = Y41_final_2;
+    Y_final[5] = Y51_final_2;
+    Y_final[6] = Y61_final_2;
+    Y_final[7] = Y71_final_2;
+    Y_final[8] = Y81_final_2;
+
+    Ti_mul_input[1] = Ti1;
+    Ti_mul_input[2] = Ti2_mul_input;
+    Ti_mul_input[3] = Ti3_mul_input;
+    Ti_mul_input[4] = Ti4_mul_input;
+    Ti_mul_input[5] = Ti5_mul_input;
+    Ti_mul_input[6] = Ti6_mul_input;
+    Ti_mul_input[7] = Ti7_mul_input;
+    Ti_mul_input[8] = Ti8_mul_input;
 end
 
-always_ff @(posedge clk) begin
-    // Inverse DCT matrix entries
-    Ti1  = 5793;
-    Ti21 = 8035;
-    Ti22 = 6811;
-    Ti23 = 4551;
-    Ti24 = 1598;
-    Ti25 = -1598;
-    Ti26 = -4551;
-    Ti27 = -6811;
-    Ti28 = -8035;
-    Ti31 = 7568;
-    Ti32 = 3135;
-    Ti33 = -3135;
-    Ti34 = -7568;
-    Ti52 = -5793;
-end
-
+// -----------------------------------------------------------------------------
+// Sequential DCT Output Computation Block
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
     if (rst) begin
-        Z_temp_11 <= 0; Z_temp_12 <= 0; Z_temp_13 <= 0; Z_temp_14 <= 0;
-        Z_temp_15 <= 0; Z_temp_16 <= 0; Z_temp_17 <= 0; Z_temp_18 <= 0;
-        Z_temp_21 <= 0; Z_temp_22 <= 0; Z_temp_23 <= 0; Z_temp_24 <= 0;
-        Z_temp_25 <= 0; Z_temp_26 <= 0; Z_temp_27 <= 0; Z_temp_28 <= 0;
-        Z_temp_31 <= 0; Z_temp_32 <= 0; Z_temp_33 <= 0; Z_temp_34 <= 0;
-        Z_temp_35 <= 0; Z_temp_36 <= 0; Z_temp_37 <= 0; Z_temp_38 <= 0;
-        Z_temp_41 <= 0; Z_temp_42 <= 0; Z_temp_43 <= 0; Z_temp_44 <= 0;
-        Z_temp_45 <= 0; Z_temp_46 <= 0; Z_temp_47 <= 0; Z_temp_48 <= 0;
-        Z_temp_51 <= 0; Z_temp_52 <= 0; Z_temp_53 <= 0; Z_temp_54 <= 0;
-        Z_temp_55 <= 0; Z_temp_56 <= 0; Z_temp_57 <= 0; Z_temp_58 <= 0;
-        Z_temp_61 <= 0; Z_temp_62 <= 0; Z_temp_63 <= 0; Z_temp_64 <= 0;
-        Z_temp_65 <= 0; Z_temp_66 <= 0; Z_temp_67 <= 0; Z_temp_68 <= 0;
-        Z_temp_71 <= 0; Z_temp_72 <= 0; Z_temp_73 <= 0; Z_temp_74 <= 0;
-        Z_temp_75 <= 0; Z_temp_76 <= 0; Z_temp_77 <= 0; Z_temp_78 <= 0;
-        Z_temp_81 <= 0; Z_temp_82 <= 0; Z_temp_83 <= 0; Z_temp_84 <= 0;
-        Z_temp_85 <= 0; Z_temp_86 <= 0; Z_temp_87 <= 0; Z_temp_88 <= 0;
+        foreach (Z_temp[i, j])
+            Z_temp[i][j] <= 32'd0;
     end else if (enable_1 && count_8) begin
-        Z_temp_11 <= Y11_final_4 * Ti1;          Z_temp_12 <= Y11_final_4 * Ti2_mul_input;
-        Z_temp_13 <= Y11_final_4 * Ti3_mul_input; Z_temp_14 <= Y11_final_4 * Ti4_mul_input;
-        Z_temp_15 <= Y11_final_4 * Ti5_mul_input; Z_temp_16 <= Y11_final_4 * Ti6_mul_input;
-        Z_temp_17 <= Y11_final_4 * Ti7_mul_input; Z_temp_18 <= Y11_final_4 * Ti8_mul_input;
-
-        Z_temp_21 <= Y21_final_2 * Ti1;           Z_temp_22 <= Y21_final_2 * Ti2_mul_input;
-        Z_temp_23 <= Y21_final_2 * Ti3_mul_input; Z_temp_24 <= Y21_final_2 * Ti4_mul_input;
-        Z_temp_25 <= Y21_final_2 * Ti5_mul_input; Z_temp_26 <= Y21_final_2 * Ti6_mul_input;
-        Z_temp_27 <= Y21_final_2 * Ti7_mul_input; Z_temp_28 <= Y21_final_2 * Ti8_mul_input;
-
-        Z_temp_31 <= Y31_final_2 * Ti1;           Z_temp_32 <= Y31_final_2 * Ti2_mul_input;
-        Z_temp_33 <= Y31_final_2 * Ti3_mul_input; Z_temp_34 <= Y31_final_2 * Ti4_mul_input;
-        Z_temp_35 <= Y31_final_2 * Ti5_mul_input; Z_temp_36 <= Y31_final_2 * Ti6_mul_input;
-        Z_temp_37 <= Y31_final_2 * Ti7_mul_input; Z_temp_38 <= Y31_final_2 * Ti8_mul_input;
-
-        Z_temp_41 <= Y41_final_2 * Ti1;           Z_temp_42 <= Y41_final_2 * Ti2_mul_input;
-        Z_temp_43 <= Y41_final_2 * Ti3_mul_input; Z_temp_44 <= Y41_final_2 * Ti4_mul_input;
-        Z_temp_45 <= Y41_final_2 * Ti5_mul_input; Z_temp_46 <= Y41_final_2 * Ti6_mul_input;
-        Z_temp_47 <= Y41_final_2 * Ti7_mul_input; Z_temp_48 <= Y41_final_2 * Ti8_mul_input;
-
-        Z_temp_51 <= Y51_final_2 * Ti1;           Z_temp_52 <= Y51_final_2 * Ti2_mul_input;
-        Z_temp_53 <= Y51_final_2 * Ti3_mul_input; Z_temp_54 <= Y51_final_2 * Ti4_mul_input;
-        Z_temp_55 <= Y51_final_2 * Ti5_mul_input; Z_temp_56 <= Y51_final_2 * Ti6_mul_input;
-        Z_temp_57 <= Y51_final_2 * Ti7_mul_input; Z_temp_58 <= Y51_final_2 * Ti8_mul_input;
-
-        Z_temp_61 <= Y61_final_2 * Ti1;           Z_temp_62 <= Y61_final_2 * Ti2_mul_input;
-        Z_temp_63 <= Y61_final_2 * Ti3_mul_input; Z_temp_64 <= Y61_final_2 * Ti4_mul_input;
-        Z_temp_65 <= Y61_final_2 * Ti5_mul_input; Z_temp_66 <= Y61_final_2 * Ti6_mul_input;
-        Z_temp_67 <= Y61_final_2 * Ti7_mul_input; Z_temp_68 <= Y61_final_2 * Ti8_mul_input;
-
-        Z_temp_71 <= Y71_final_2 * Ti1;           Z_temp_72 <= Y71_final_2 * Ti2_mul_input;
-        Z_temp_73 <= Y71_final_2 * Ti3_mul_input; Z_temp_74 <= Y71_final_2 * Ti4_mul_input;
-        Z_temp_75 <= Y71_final_2 * Ti5_mul_input; Z_temp_76 <= Y71_final_2 * Ti6_mul_input;
-        Z_temp_77 <= Y71_final_2 * Ti7_mul_input; Z_temp_78 <= Y71_final_2 * Ti8_mul_input;
-
-        Z_temp_81 <= Y81_final_2 * Ti1;           Z_temp_82 <= Y81_final_2 * Ti2_mul_input;
-        Z_temp_83 <= Y81_final_2 * Ti3_mul_input; Z_temp_84 <= Y81_final_2 * Ti4_mul_input;
-        Z_temp_85 <= Y81_final_2 * Ti5_mul_input; Z_temp_86 <= Y81_final_2 * Ti6_mul_input;
-        Z_temp_87 <= Y81_final_2 * Ti7_mul_input; Z_temp_88 <= Y81_final_2 * Ti8_mul_input;
+        foreach (Z_temp[i, j])
+            Z_temp[i][j] <= Y_final[i] * Ti_mul_input[j];
     end
 end
 
+
+
+// -----------------------------------------------------------------------------
+// Sequential Block for Reset, Clear, and Accumulate
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
-    // If reset is active, clear all DCT output accumulators
     if (rst) begin
-        Z11 <= 0;  Z12 <= 0;  Z13 <= 0;  Z14 <= 0;  Z15 <= 0;  Z16 <= 0;  Z17 <= 0;  Z18 <= 0;
-        Z21 <= 0;  Z22 <= 0;  Z23 <= 0;  Z24 <= 0;  Z25 <= 0;  Z26 <= 0;  Z27 <= 0;  Z28 <= 0;
-        Z31 <= 0;  Z32 <= 0;  Z33 <= 0;  Z34 <= 0;  Z35 <= 0;  Z36 <= 0;  Z37 <= 0;  Z38 <= 0;
-        Z41 <= 0;  Z42 <= 0;  Z43 <= 0;  Z44 <= 0;  Z45 <= 0;  Z46 <= 0;  Z47 <= 0;  Z48 <= 0;
-        Z51 <= 0;  Z52 <= 0;  Z53 <= 0;  Z54 <= 0;  Z55 <= 0;  Z56 <= 0;  Z57 <= 0;  Z58 <= 0;
-        Z61 <= 0;  Z62 <= 0;  Z63 <= 0;  Z64 <= 0;  Z65 <= 0;  Z66 <= 0;  Z67 <= 0;  Z68 <= 0;
-        Z71 <= 0;  Z72 <= 0;  Z73 <= 0;  Z74 <= 0;  Z75 <= 0;  Z76 <= 0;  Z77 <= 0;  Z78 <= 0;
-        Z81 <= 0;  Z82 <= 0;  Z83 <= 0;  Z84 <= 0;  Z85 <= 0;  Z86 <= 0;  Z87 <= 0;  Z88 <= 0;
+        foreach (Z[i, j])
+            Z[i][j] <= '0;
     end 
-    // Clear all outputs if count_8 is active and we're in the first pass (count_of == 1)
     else if (count_8 && count_of == 3'd1) begin
-        Z11 <= 0;  Z12 <= 0;  Z13 <= 0;  Z14 <= 0;
-        Z15 <= 0;  Z16 <= 0;  Z17 <= 0;  Z18 <= 0;
-        Z21 <= 0;  Z22 <= 0;  Z23 <= 0;  Z24 <= 0;
-        Z25 <= 0;  Z26 <= 0;  Z27 <= 0;  Z28 <= 0;
-        Z31 <= 0;  Z32 <= 0;  Z33 <= 0;  Z34 <= 0;
-        Z35 <= 0;  Z36 <= 0;  Z37 <= 0;  Z38 <= 0;
-        Z41 <= 0;  Z42 <= 0;  Z43 <= 0;  Z44 <= 0;
-        Z45 <= 0;  Z46 <= 0;  Z47 <= 0;  Z48 <= 0;
-        Z51 <= 0;  Z52 <= 0;  Z53 <= 0;  Z54 <= 0;
-        Z55 <= 0;  Z56 <= 0;  Z57 <= 0;  Z58 <= 0;
-        Z61 <= 0;  Z62 <= 0;  Z63 <= 0;  Z64 <= 0;
-        Z65 <= 0;  Z66 <= 0;  Z67 <= 0;  Z68 <= 0;
-        Z71 <= 0;  Z72 <= 0;  Z73 <= 0;  Z74 <= 0;
-        Z75 <= 0;  Z76 <= 0;  Z77 <= 0;  Z78 <= 0;
-        Z81 <= 0;  Z82 <= 0;  Z83 <= 0;  Z84 <= 0;
-        Z85 <= 0;  Z86 <= 0;  Z87 <= 0;  Z88 <= 0;
+        foreach (Z[i, j])
+            Z[i][j] <= '0;
     end 
-    // Accumulate transformed values when enabled and count_9 is active
     else if (enable && count_9) begin
-        Z11 <= Z11 + Z_temp_11;  Z12 <= Z12 + Z_temp_12;  Z13 <= Z13 + Z_temp_13;  Z14 <= Z14 + Z_temp_14;
-        Z15 <= Z15 + Z_temp_15;  Z16 <= Z16 + Z_temp_16;  Z17 <= Z17 + Z_temp_17;  Z18 <= Z18 + Z_temp_18;
-        Z21 <= Z21 + Z_temp_21;  Z22 <= Z22 + Z_temp_22;  Z23 <= Z23 + Z_temp_23;  Z24 <= Z24 + Z_temp_24;
-        Z25 <= Z25 + Z_temp_25;  Z26 <= Z26 + Z_temp_26;  Z27 <= Z27 + Z_temp_27;  Z28 <= Z28 + Z_temp_28;
-        Z31 <= Z31 + Z_temp_31;  Z32 <= Z32 + Z_temp_32;  Z33 <= Z33 + Z_temp_33;  Z34 <= Z34 + Z_temp_34;
-        Z35 <= Z35 + Z_temp_35;  Z36 <= Z36 + Z_temp_36;  Z37 <= Z37 + Z_temp_37;  Z38 <= Z38 + Z_temp_38;
-        Z41 <= Z41 + Z_temp_41;  Z42 <= Z42 + Z_temp_42;  Z43 <= Z43 + Z_temp_43;  Z44 <= Z44 + Z_temp_44;
-        Z45 <= Z45 + Z_temp_45;  Z46 <= Z46 + Z_temp_46;  Z47 <= Z47 + Z_temp_47;  Z48 <= Z48 + Z_temp_48;
-        Z51 <= Z51 + Z_temp_51;  Z52 <= Z52 + Z_temp_52;  Z53 <= Z53 + Z_temp_53;  Z54 <= Z54 + Z_temp_54;
-        Z55 <= Z55 + Z_temp_55;  Z56 <= Z56 + Z_temp_56;  Z57 <= Z57 + Z_temp_57;  Z58 <= Z58 + Z_temp_58;
-        Z61 <= Z61 + Z_temp_61;  Z62 <= Z62 + Z_temp_62;  Z63 <= Z63 + Z_temp_63;  Z64 <= Z64 + Z_temp_64;
-        Z65 <= Z65 + Z_temp_65;  Z66 <= Z66 + Z_temp_66;  Z67 <= Z67 + Z_temp_67;  Z68 <= Z68 + Z_temp_68;
-        Z71 <= Z71 + Z_temp_71;  Z72 <= Z72 + Z_temp_72;  Z73 <= Z73 + Z_temp_73;  Z74 <= Z74 + Z_temp_74;
-        Z75 <= Z75 + Z_temp_75;  Z76 <= Z76 + Z_temp_76;  Z77 <= Z77 + Z_temp_77;  Z78 <= Z78 + Z_temp_78;
-        Z81 <= Z81 + Z_temp_81;  Z82 <= Z82 + Z_temp_82;  Z83 <= Z83 + Z_temp_83;  Z84 <= Z84 + Z_temp_84;
-        Z85 <= Z85 + Z_temp_85;  Z86 <= Z86 + Z_temp_86;  Z87 <= Z87 + Z_temp_87;  Z88 <= Z88 + Z_temp_88;
+        foreach (Z[i, j])
+            Z[i][j] <= Z[i][j] + Z_temp[i][j];
     end
 end
+
+// -----------------------------------------------------------------------------
+// Final Output Computation with Reset and Rounding
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
-    // Reset condition: Clear all final Z outputs
     if (rst) begin
-        // Zero all Z_final registers (8x8 matrix flattened)
-        Z11_final <= 0; Z12_final <= 0; Z13_final <= 0; Z14_final <= 0;
-        Z15_final <= 0; Z16_final <= 0; Z17_final <= 0; Z18_final <= 0;
-        Z21_final <= 0; Z22_final <= 0; Z23_final <= 0; Z24_final <= 0;
-        Z25_final <= 0; Z26_final <= 0; Z27_final <= 0; Z28_final <= 0;
-        Z31_final <= 0; Z32_final <= 0; Z33_final <= 0; Z34_final <= 0;
-        Z35_final <= 0; Z36_final <= 0; Z37_final <= 0; Z38_final <= 0;
-        Z41_final <= 0; Z42_final <= 0; Z43_final <= 0; Z44_final <= 0;
-        Z45_final <= 0; Z46_final <= 0; Z47_final <= 0; Z48_final <= 0;
-        Z51_final <= 0; Z52_final <= 0; Z53_final <= 0; Z54_final <= 0;
-        Z55_final <= 0; Z56_final <= 0; Z57_final <= 0; Z58_final <= 0;
-        Z61_final <= 0; Z62_final <= 0; Z63_final <= 0; Z64_final <= 0;
-        Z65_final <= 0; Z66_final <= 0; Z67_final <= 0; Z68_final <= 0;
-        Z71_final <= 0; Z72_final <= 0; Z73_final <= 0; Z74_final <= 0;
-        Z75_final <= 0; Z76_final <= 0; Z77_final <= 0; Z78_final <= 0;
-        Z81_final <= 0; Z82_final <= 0; Z83_final <= 0; Z84_final <= 0;
-        Z85_final <= 0; Z86_final <= 0; Z87_final <= 0; Z88_final <= 0;
+        // Reset all final DCT outputs
+        foreach (Z_final[i, j]) begin
+            Z_final[i][j] <= '0;
+        end
     end
-
-    // Compute final values only on count_10 and first pass (count_of == 0)
     else if (count_10 && count_of == 0) begin
-        // For each Zxx register:
-        // If the 16th bit (bit 15) is 1, round up the 27:16 bits.
-        // Else, just take bits 26:16 as is (truncate fractional part)
-        Z11_final <= Z11[15] ? Z11[26:16] + 1 : Z11[26:16];
-        Z12_final <= Z12[15] ? Z12[26:16] + 1 : Z12[26:16];
-        Z13_final <= Z13[15] ? Z13[26:16] + 1 : Z13[26:16];
-        Z14_final <= Z14[15] ? Z14[26:16] + 1 : Z14[26:16];
-        Z15_final <= Z15[15] ? Z15[26:16] + 1 : Z15[26:16];
-        Z16_final <= Z16[15] ? Z16[26:16] + 1 : Z16[26:16];
-        Z17_final <= Z17[15] ? Z17[26:16] + 1 : Z17[26:16];
-        Z18_final <= Z18[15] ? Z18[26:16] + 1 : Z18[26:16];
-
-        Z21_final <= Z21[15] ? Z21[26:16] + 1 : Z21[26:16];
-        Z22_final <= Z22[15] ? Z22[26:16] + 1 : Z22[26:16];
-        Z23_final <= Z23[15] ? Z23[26:16] + 1 : Z23[26:16];
-        Z24_final <= Z24[15] ? Z24[26:16] + 1 : Z24[26:16];
-        Z25_final <= Z25[15] ? Z25[26:16] + 1 : Z25[26:16];
-        Z26_final <= Z26[15] ? Z26[26:16] + 1 : Z26[26:16];
-        Z27_final <= Z27[15] ? Z27[26:16] + 1 : Z27[26:16];
-        Z28_final <= Z28[15] ? Z28[26:16] + 1 : Z28[26:16];
-
-        Z31_final <= Z31[15] ? Z31[26:16] + 1 : Z31[26:16];
-        Z32_final <= Z32[15] ? Z32[26:16] + 1 : Z32[26:16];
-        Z33_final <= Z33[15] ? Z33[26:16] + 1 : Z33[26:16];
-        Z34_final <= Z34[15] ? Z34[26:16] + 1 : Z34[26:16];
-        Z35_final <= Z35[15] ? Z35[26:16] + 1 : Z35[26:16];
-        Z36_final <= Z36[15] ? Z36[26:16] + 1 : Z36[26:16];
-        Z37_final <= Z37[15] ? Z37[26:16] + 1 : Z37[26:16];
-        Z38_final <= Z38[15] ? Z38[26:16] + 1 : Z38[26:16];
-
-        Z41_final <= Z41[15] ? Z41[26:16] + 1 : Z41[26:16];
-        Z42_final <= Z42[15] ? Z42[26:16] + 1 : Z42[26:16];
-        Z43_final <= Z43[15] ? Z43[26:16] + 1 : Z43[26:16];
-        Z44_final <= Z44[15] ? Z44[26:16] + 1 : Z44[26:16];
-        Z45_final <= Z45[15] ? Z45[26:16] + 1 : Z45[26:16];
-        Z46_final <= Z46[15] ? Z46[26:16] + 1 : Z46[26:16];
-        Z47_final <= Z47[15] ? Z47[26:16] + 1 : Z47[26:16];
-        Z48_final <= Z48[15] ? Z48[26:16] + 1 : Z48[26:16];
-
-        Z51_final <= Z51[15] ? Z51[26:16] + 1 : Z51[26:16];
-        Z52_final <= Z52[15] ? Z52[26:16] + 1 : Z52[26:16];
-        Z53_final <= Z53[15] ? Z53[26:16] + 1 : Z53[26:16];
-        Z54_final <= Z54[15] ? Z54[26:16] + 1 : Z54[26:16];
-        Z55_final <= Z55[15] ? Z55[26:16] + 1 : Z55[26:16];
-        Z56_final <= Z56[15] ? Z56[26:16] + 1 : Z56[26:16];
-        Z57_final <= Z57[15] ? Z57[26:16] + 1 : Z57[26:16];
-        Z58_final <= Z58[15] ? Z58[26:16] + 1 : Z58[26:16];
-
-        Z61_final <= Z61[15] ? Z61[26:16] + 1 : Z61[26:16];
-        Z62_final <= Z62[15] ? Z62[26:16] + 1 : Z62[26:16];
-        Z63_final <= Z63[15] ? Z63[26:16] + 1 : Z63[26:16];
-        Z64_final <= Z64[15] ? Z64[26:16] + 1 : Z64[26:16];
-        Z65_final <= Z65[15] ? Z65[26:16] + 1 : Z65[26:16];
-        Z66_final <= Z66[15] ? Z66[26:16] + 1 : Z66[26:16];
-        Z67_final <= Z67[15] ? Z67[26:16] + 1 : Z67[26:16];
-        Z68_final <= Z68[15] ? Z68[26:16] + 1 : Z68[26:16];
-
-        Z71_final <= Z71[15] ? Z71[26:16] + 1 : Z71[26:16];
-        Z72_final <= Z72[15] ? Z72[26:16] + 1 : Z72[26:16];
-        Z73_final <= Z73[15] ? Z73[26:16] + 1 : Z73[26:16];
-        Z74_final <= Z74[15] ? Z74[26:16] + 1 : Z74[26:16];
-        Z75_final <= Z75[15] ? Z75[26:16] + 1 : Z75[26:16];
-        Z76_final <= Z76[15] ? Z76[26:16] + 1 : Z76[26:16];
-        Z77_final <= Z77[15] ? Z77[26:16] + 1 : Z77[26:16];
-        Z78_final <= Z78[15] ? Z78[26:16] + 1 : Z78[26:16];
-
-        Z81_final <= Z81[15] ? Z81[26:16] + 1 : Z81[26:16];
-        Z82_final <= Z82[15] ? Z82[26:16] + 1 : Z82[26:16];
-        Z83_final <= Z83[15] ? Z83[26:16] + 1 : Z83[26:16];
-        Z84_final <= Z84[15] ? Z84[26:16] + 1 : Z84[26:16];
-        Z85_final <= Z85[15] ? Z85[26:16] + 1 : Z85[26:16];
-        Z86_final <= Z86[15] ? Z86[26:16] + 1 : Z86[26:16];
-        Z87_final <= Z87[15] ? Z87[26:16] + 1 : Z87[26:16];
-        Z88_final <= Z88[15] ? Z88[26:16] + 1 : Z88[26:16];
+        // Rounding: if bit 15 is 1 (fraction ≥ 0.5), round up; else truncate
+        foreach (Z[i, j]) begin
+            Z_final[i][j] <= Z[i][j][15] ? Z[i][j][26:16] + 1 : Z[i][j][26:16];
+        end
     end
-end   
-// Signals the quantizer that output data is ready
+end
+
+// -----------------------------------------------------------------------------
+// Module: Y Row Accumulation and Multiplier Stage
+// Description: 
+//   - Computes partial Y matrix entries during 1D DCT
+//   - Handles multiplication and accumulation per clock cycle
+//   - Signals when final output is ready to quantizer
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Control Signal: output_enable
+//  - Asserted only when valid 8x8 block output is available (1st pass, count_10)
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
     if (rst)
         output_enable <= 0;
@@ -373,7 +200,10 @@ always_ff @(posedge clk) begin
         output_enable <= 1;  // Valid output condition
 end
 
-// Calculates Y_temp_11 as data_in * T1 when enabled
+// -----------------------------------------------------------------------------
+// Y_temp_11 Computation
+//  - Multiply input data by transform coefficient T1
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
     if (rst)
         Y_temp_11 <= 0;
@@ -381,17 +211,24 @@ always_ff @(posedge clk) begin
         Y_temp_11 <= data_in * T1;
 end
 
-// Updates Y11 based on count and enable signals
+// -----------------------------------------------------------------------------
+// Y11 Accumulation
+//  - Load first term when count == 1
+//  - Otherwise accumulate into Y11
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
     if (rst)
         Y11 <= 0;
     else if ((count == 1) && enable)
         Y11 <= Y_temp_11;           // Initial load
     else if (enable)
-        Y11 <= Y_temp_11 + Y11;     // Accumulate
+        Y11 <= Y_temp_11 + Y11;     // Accumulate result
 end
 
-// Computes temporary Y values for rows 2 to 8
+// -----------------------------------------------------------------------------
+// Y_temp Computation for Rows 2 to 8
+//  - Multiply input with corresponding transform coefficients
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
     if (rst) begin
         Y_temp_21 <= 0;
@@ -401,7 +238,8 @@ always_ff @(posedge clk) begin
         Y_temp_61 <= 0;
         Y_temp_71 <= 0;
         Y_temp_81 <= 0;
-    end else if (!enable_1) begin
+    end 
+    else if (!enable_1) begin
         Y_temp_21 <= 0;
         Y_temp_31 <= 0;
         Y_temp_41 <= 0;
@@ -409,7 +247,8 @@ always_ff @(posedge clk) begin
         Y_temp_61 <= 0;
         Y_temp_71 <= 0;
         Y_temp_81 <= 0;
-    end else if (enable_1) begin
+    end 
+    else if (enable_1) begin
         Y_temp_21 <= data_1 * Y2_mul_input;
         Y_temp_31 <= data_1 * Y3_mul_input;
         Y_temp_41 <= data_1 * Y4_mul_input;
@@ -419,37 +258,43 @@ always_ff @(posedge clk) begin
         Y_temp_81 <= data_1 * Y8_mul_input;
     end
 end
-// Accumulates the Y_temp values into Y21 to Y81 registers row-wise
+// -----------------------------------------------------------------------------
+// Module: Y Row Accumulator and Clocked Counter Pipeline
+// Description:
+//   - Accumulates intermediate multiplication results (Y_temp_XX) row-wise
+//   - Tracks DCT processing steps using a 10-stage pipeline of count flags
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Accumulation Logic for Y21 to Y81
+//  - Accumulates Y_temp_xx values into corresponding Yxx registers
+//  - Only active when enable_1 is high
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
-		Y21 <= 0;
-		Y31 <= 0;
-		Y41 <= 0;
-		Y51 <= 0;
-		Y61 <= 0;
-		Y71 <= 0;
-		Y81 <= 0;
-	end else if (!enable_1) begin
-		Y21 <= 0;
-		Y31 <= 0;
-		Y41 <= 0;
-		Y51 <= 0;
-		Y61 <= 0;
-		Y71 <= 0;
-		Y81 <= 0;
-	end else if (enable_1) begin
-		// Accumulate with previous values
-		Y21 <= Y_temp_21 + Y21;
-		Y31 <= Y_temp_31 + Y31;
-		Y41 <= Y_temp_41 + Y41;
-		Y51 <= Y_temp_51 + Y51;
-		Y61 <= Y_temp_61 + Y61;
-		Y71 <= Y_temp_71 + Y71;
-		Y81 <= Y_temp_81 + Y81;
+		Y21 <= 0; Y31 <= 0; Y41 <= 0; Y51 <= 0;
+		Y61 <= 0; Y71 <= 0; Y81 <= 0;
+	end 
+	else if (!enable_1) begin
+		Y21 <= 0; Y31 <= 0; Y41 <= 0; Y51 <= 0;
+		Y61 <= 0; Y71 <= 0; Y81 <= 0;
+	end 
+	else if (enable_1) begin
+		Y21 <= Y21 + Y_temp_21;
+		Y31 <= Y31 + Y_temp_31;
+		Y41 <= Y41 + Y_temp_41;
+		Y51 <= Y51 + Y_temp_51;
+		Y61 <= Y61 + Y_temp_61;
+		Y71 <= Y71 + Y_temp_71;
+		Y81 <= Y81 + Y_temp_81;
 	end
 end
 
-// Counter pipeline for time-step tracking (count_1 to count_10)
+// -----------------------------------------------------------------------------
+// Counter Pipeline Logic (count_1 to count_10)
+//  - Used for pipelining processing steps (e.g., DCT stages)
+//  - count_1 is assumed to be derived from count internally or elsewhere
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
 		count     <= 0;
@@ -461,7 +306,8 @@ always_ff @(posedge clk) begin
 		count_8   <= 0;
 		count_9   <= 0;
 		count_10  <= 0;
-	end else if (!enable) begin
+	end 
+	else if (!enable) begin
 		count     <= 0;
 		count_3   <= 0;
 		count_4   <= 0;
@@ -471,7 +317,8 @@ always_ff @(posedge clk) begin
 		count_8   <= 0;
 		count_9   <= 0;
 		count_10  <= 0;
-	end else if (enable) begin
+	end 
+	else if (enable) begin
 		count     <= count + 1;
 		count_3   <= count_1;
 		count_4   <= count_3;
@@ -484,53 +331,74 @@ always_ff @(posedge clk) begin
 	end
 end
 
+
+// -----------------------------------------------------------------------------
 // count_1 goes high for one cycle when count == 7 and enable is active
+// Used to signal end of an 8-cycle DCT row/column input sequence
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
 		count_1 <= 0;
-	end else if (count != 7 || !enable) begin
+	end 
+	else if (count != 7 || !enable) begin
 		count_1 <= 0;
-	end else if (count == 7) begin
+	end 
+	else if (count == 7) begin
 		count_1 <= 1;
 	end
 end
 
-// count_of and its copy increment once when count_1 is high (i.e., every 8 inputs)
+// -----------------------------------------------------------------------------
+// count_of and count_of_copy increment when one 8-sample DCT pass is complete
+// These act as DCT row (or column) counters for 8x8 matrix input
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
 		count_of <= 0;
 		count_of_copy <= 0;
-	end else if (!enable) begin
+	end 
+	else if (!enable) begin
 		count_of <= 0;
 		count_of_copy <= 0;
-	end else if (count_1 == 1) begin
+	end 
+	else if (count_1) begin
 		count_of <= count_of + 1;
 		count_of_copy <= count_of_copy + 1;
 	end
 end
 
-// Center Y11 value by subtracting mean before DCT (only needed for row 1)
+// -----------------------------------------------------------------------------
+// Center Y11 value by subtracting the DC bias from the first row's sum
+// Only applied to first row (Y11) on count_3 (delayed pipeline stage)
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
 		Y11_final <= 0;
-	end else if (count_3 && enable_1) begin
-		// Adjust Y11 by subtracting the average (128*8*5793 = 5932032)
+	end 
+	else if (count_3 && enable_1) begin
+		// Subtract average (DC component): 128 * 8 * T1 = 128*8*5793 = 5932032
 		Y11_final <= Y11 - 25'd5932032;
 
-		/* 
+		/*
 			Why subtract 5932032?
-			- Each input Y pixel has a DC bias of 128
-			- For an 8x8 block, the sum = 128 * 8 * coefficient = 5932032
-			- This is only for the first row, others cancel to 0 in the DCT matrix
+			- Each input Y pixel = 128 baseline (DC bias)
+			- Block has 8 pixels: 128 * 8 = 1024
+			- Coefficient T1 ≈ 5793 (scaled fixed-point)
+			- Final DC bias = 1024 * 5793 = 5932032
+			- This is the mean value that must be centered to 0
 		*/
 	end
 end
+// -----------------------------------------------------------------------------
+// Module: Final Y Row Latching (Rows 2–8)
+// Description:
+//   - On reset: clear all final and previous values.
+//   - When not enabled: clear all values to avoid stale data propagation.
+//   - On count_4 (aligned to DCT pipeline): 
+//     - Capture final row-wise accumulated DCT inputs.
+//     - Also store previous values for potential differential processing.
+// -----------------------------------------------------------------------------
 
-//--------------------------------------------------------------
-// Sequential logic to update final Y values for rows 2–8
-// Stores both the current (_final) and previous (_final_prev) values
-//--------------------------------------------------------------
-    
 always_ff @(posedge clk) begin
 	if (rst) begin
 		// Reset all outputs to 0
@@ -541,9 +409,9 @@ always_ff @(posedge clk) begin
 		Y61_final <= 0; Y61_final_prev <= 0;
 		Y71_final <= 0; Y71_final_prev <= 0;
 		Y81_final <= 0; Y81_final_prev <= 0;
-
-	end else if (!enable_1) begin
-		// Clear values when not enabled
+	end 
+	else if (!enable_1) begin
+		// Clear values when disabled (to prevent invalid results)
 		Y21_final <= 0; Y21_final_prev <= 0;
 		Y31_final <= 0; Y31_final_prev <= 0;
 		Y41_final <= 0; Y41_final_prev <= 0;
@@ -551,9 +419,9 @@ always_ff @(posedge clk) begin
 		Y61_final <= 0; Y61_final_prev <= 0;
 		Y71_final <= 0; Y71_final_prev <= 0;
 		Y81_final <= 0; Y81_final_prev <= 0;
-
-	end else if (count_4 && enable_1) begin
-		// On the fourth cycle of processing, store current and previous row results
+	end 
+	else if (count_4 && enable_1) begin
+		// Capture computed Y values on 4th pipeline cycle
 		Y21_final <= Y21; Y21_final_prev <= Y21_final;
 		Y31_final <= Y31; Y31_final_prev <= Y31_final;
 		Y41_final <= Y41; Y41_final_prev <= Y41_final;
@@ -564,18 +432,24 @@ always_ff @(posedge clk) begin
 	end
 end
 
-//--------------------------------------------------------------
-// Calculates the difference between the current and previous row values
-// Used to determine how each row's output changed from the last cycle
-//--------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Module: Final Y Row Difference Calculator (Rows 2–8)
+// Description:
+//   - Computes how much each row’s output has changed from the previous cycle.
+//   - Useful for differential processing (e.g., delta encoding).
+//   - Active on the 5th pipeline cycle after accumulation.
+// -----------------------------------------------------------------------------
+
 always_ff @(posedge clk) begin
 	if (rst) begin
+		// Clear all differences on reset
 		Y21_final_diff <= 0; Y31_final_diff <= 0;
 		Y41_final_diff <= 0; Y51_final_diff <= 0;
 		Y61_final_diff <= 0; Y71_final_diff <= 0;
 		Y81_final_diff <= 0;
 	end
 	else if (count_5 && enable_1) begin
+		// Calculate deltas between current and previous values
 		Y21_final_diff <= Y21_final - Y21_final_prev;
 		Y31_final_diff <= Y31_final - Y31_final_prev;
 		Y41_final_diff <= Y41_final - Y41_final_prev;
@@ -783,72 +657,56 @@ always_ff @(posedge clk) begin
 	endcase
 end
 
-// Rounding and sign-extension stage for DCT output values
+// -----------------------------------------------------------------------------
+// Rounding and sign-extension stage for DCT output values (vectorized)
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst) begin
-		// Clear all outputs on reset
-		data_1         <= 0;
-		Y11_final_1    <= 0; Y21_final_1    <= 0; Y31_final_1    <= 0; Y41_final_1    <= 0;
-		Y51_final_1    <= 0; Y61_final_1    <= 0; Y71_final_1    <= 0; Y81_final_1    <= 0;
-		Y11_final_2    <= 0; Y21_final_2    <= 0; Y31_final_2    <= 0; Y41_final_2    <= 0;
-		Y51_final_2    <= 0; Y61_final_2    <= 0; Y71_final_2    <= 0; Y81_final_2    <= 0;
-		Y11_final_3    <= 0;
-		Y11_final_4    <= 0;
+		data_1 <= 0;
+		for (int i = 1; i <= 8; i++) begin
+			Y_final_1[i] <= 0;
+			Y_final_2[i] <= 0;
+		end
+		Y11_final_3 <= 0;
+		Y11_final_4 <= 0;
 	end else if (enable) begin
-		// Pipeline input for future stages
 		data_1 <= data_in;
 
-		// Rounding logic for Y11_final
-		Y11_final_1 <= Y11_final[11] ? Y11_final[24:12] + 1 : Y11_final[24:12];
-		Y11_final_2[31:13] <= Y11_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y11_final_2[12:0]  <= Y11_final_1;
-		Y11_final_3 <= Y11_final_2;
+		// ---------- Y11 final (DC term) ----------
+		Y_final_1[1] <= Y11_final[11] ? Y11_final[24:12] + 1 : Y11_final[24:12];
+		Y_final_2[1][31:13] <= Y_final_1[1][12] ? 21'h1FFFFF : 21'h000000;
+		Y_final_2[1][12:0]  <= Y_final_1[1];
+		Y11_final_3 <= Y_final_2[1];
 		Y11_final_4 <= Y11_final_3;
 
-		// Rounding and sign-extension for Y21_final_diff
-		Y21_final_1 <= Y21_final_diff[11] ? Y21_final_diff[24:12] + 1 : Y21_final_diff[24:12];
-		Y21_final_2[31:13] <= Y21_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y21_final_2[12:0]  <= Y21_final_1;
+		// ---------- Y2 to Y8 AC values ----------
+		for (int i = 2; i <= 8; i++) begin
+			logic signed [24:0] diff;
+			case (i)
+				2: diff = Y21_final_diff;
+				3: diff = Y31_final_diff;
+				4: diff = Y41_final_diff;
+				5: diff = Y51_final_diff;
+				6: diff = Y61_final_diff;
+				7: diff = Y71_final_diff;
+				8: diff = Y81_final_diff;
+			endcase
 
-		Y31_final_1 <= Y31_final_diff[11] ? Y31_final_diff[24:12] + 1 : Y31_final_diff[24:12];
-		Y31_final_2[31:13] <= Y31_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y31_final_2[12:0]  <= Y31_final_1;
+			Y_final_1[i] <= diff[11] ? diff[24:12] + 1 : diff[24:12];
+			Y_final_2[i][31:13] <= Y_final_1[i][12] ? 21'h1FFFFF : 21'h000000;
+			Y_final_2[i][12:0]  <= Y_final_1[i];
+		end
 
-		Y41_final_1 <= Y41_final_diff[11] ? Y41_final_diff[24:12] + 1 : Y41_final_diff[24:12];
-		Y41_final_2[31:13] <= Y41_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y41_final_2[12:0]  <= Y41_final_1;
-
-		Y51_final_1 <= Y51_final_diff[11] ? Y51_final_diff[24:12] + 1 : Y51_final_diff[24:12];
-		Y51_final_2[31:13] <= Y51_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y51_final_2[12:0]  <= Y51_final_1;
-
-		Y61_final_1 <= Y61_final_diff[11] ? Y61_final_diff[24:12] + 1 : Y61_final_diff[24:12];
-		Y61_final_2[31:13] <= Y61_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y61_final_2[12:0]  <= Y61_final_1;
-
-		Y71_final_1 <= Y71_final_diff[11] ? Y71_final_diff[24:12] + 1 : Y71_final_diff[24:12];
-		Y71_final_2[31:13] <= Y71_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y71_final_2[12:0]  <= Y71_final_1;
-
-		Y81_final_1 <= Y81_final_diff[11] ? Y81_final_diff[24:12] + 1 : Y81_final_diff[24:12];
-		Y81_final_2[31:13] <= Y81_final_1[12] ? 21'h1FFFFF : 21'h000000;
-		Y81_final_2[12:0]  <= Y81_final_1;
-
-		/* --------------------------------------------------------------
-			Rounding strategy:
-			- Bit 11 is the fractional bit (rounding decision)
-			- Bits 24:12 are integer part
-			- Sign extension is performed for negative values
-		*/---------------------------------------------------------
 	end
 end
-//--------------------------------------------------------------
-// Pipeline enable signal
-//--------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
+// Pipeline enable signal stage
+// -----------------------------------------------------------------------------
 always_ff @(posedge clk) begin
 	if (rst)
 		enable_1 <= 1'b0;
 	else
 		enable_1 <= enable;
 end
-endmodule
+
