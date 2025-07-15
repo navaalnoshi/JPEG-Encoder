@@ -68,14 +68,4 @@ module jpeg_top (
         .eof_data_partial_ready(eof_data_partial_ready)
     );
 
-    // -------------------------------------------------------------------------
-    // Optional waveform generation for simulation (enabled with +define+TRACE)
-    // -------------------------------------------------------------------------
-    `ifdef TRACE
-    initial begin
-        $dumpfile("waveform.vcd");
-        $dumpvars(0, jpeg_top);
-    end
-    `endif
-
 endmodule
