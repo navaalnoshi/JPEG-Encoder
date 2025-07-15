@@ -2,7 +2,6 @@
 --------------------------------------------------------------------------------
 Module: sync_fifo_ff 
 Description:
-  - Synchronous FIFO with 91-bit wide data for JPEG bitstream stages.
   - Stores encoded blocks and outputs them sequentially for FF checking.
   - Supports special "rollover_write" case to add delay after FF escaping.
   - FIFO depth: 16 entries.
