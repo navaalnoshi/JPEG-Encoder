@@ -110,39 +110,56 @@ module RGB2YCBCR (
     //which we used as well as in this we will check the 13th bit LSB is 1 then add 1
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            y_out  <= 0;
-            cb_out <= 0;
-            cr_out <= 0;
-        end else if (enable_d1) begin
-            // Round Y: check bit 13 (LSB of fractional part)
-            y_out <= y_sum[13] ? y_sum[21:14] + 1 : y_sum[21:14];
+    if (rst) begin
+        y_out  <= 0;
+        cb_out <= 0;
+        cr_out <= 0;
+    end else if (enable_d1) begin
+        // Local wires for potential rounded values
+        logic [7:0] y_rounded;
+        logic [7:0] cb_rounded;
+        logic [7:0] cr_rounded;
 
-            // Round and saturate Cb
-            cb_out <= (cb_sum[13] && cb_sum[21:14] != 8'd255) 
-                    ? cb_sum[21:14] + 1 
-                    : cb_sum[21:14];
-
-            // Round and saturate Cr
-            cr_out <= (cr_sum[13] && cr_sum[21:14] != 8'd255) 
-                    ? cr_sum[21:14] + 1 
-                    : cr_sum[21:14];
+        // Y rounding
+        y_rounded = y_sum[21:14];
+        if (y_sum[13]) begin // Check bit 13 for rounding up
+            y_rounded = y_rounded + 1;
         end
-    end
+        y_out <= y_rounded;
 
-    // -------------------------------------------------------------------------
-    // Stage 3: Enable signal pipeline to align with 2-stage data processing
-    // -------------------------------------------------------------------------
-    always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
-            enable_d1  <= 0;
-            enable_d2  <= 0;
-            enable_out <= 0;
-        end else begin
-            enable_d1  <= enable;
-            enable_d2  <= enable_d1;
-            enable_out <= enable_d2;
+        // Cb rounding and saturation
+        cb_rounded = cb_sum[21:14];
+        if (cb_sum[13]) begin // Check bit 13 for rounding up
+            if (cb_rounded != 8'd255) begin // Saturate if already 255
+                cb_rounded = cb_rounded + 1;
+            end
         end
+        cb_out <= cb_rounded;
+        
+        // Cr rounding and saturation
+        cr_rounded = cr_sum[21:14];
+        if (cr_sum[13]) begin // Check bit 13 for rounding up
+            if (cr_rounded != 8'd255) begin // Saturate if already 255
+                cr_rounded = cr_rounded + 1;
+            end
+        end
+        cr_out <= cr_rounded;
     end
+end
+
+// ---
+// Stage 3: Enable signal pipeline to align with 2-stage data processing
+// ---
+always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+        enable_d1  <= 0;
+        enable_d2  <= 0;
+        enable_out <= 0;
+    end else begin
+        enable_d1  <= enable;
+        enable_d2  <= enable_d1;
+        enable_out <= enable_d2;
+    end
+end
 
 endmodule
