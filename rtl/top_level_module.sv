@@ -12,20 +12,6 @@
 //   3. At end-of-file, if the bitstream contains fewer than 32 valid bits,
 //      it signals this with `eof_data_partial_ready` and outputs the valid bit
 //      count using `end_of_file_bitstream_count`.
-//
-// Inputs:
-//   - clk                       : Clock signal
-//   - rst                       : Active-high synchronous reset
-//   - end_of_file_signal        : Signals the final data input
-//   - enable                    : Enables data flow from fifo_out
-//   - data_in[23:0]             : 24-bit input data (from entropy encoder)
-//
-// Outputs:
-//   - JPEG_bitstream[31:0]      : Final 32-bit JPEG-compliant output
-//   - data_ready                : Indicates `JPEG_bitstream` is valid
-//   - end_of_file_bitstream_count[4:0]
-//                               : Valid bit count in final output word
-//   - eof_data_partial_ready    : Asserted when output has <32 valid bits
 // -----------------------------------------------------------------------------
 
 `timescale 1ns / 100ps
