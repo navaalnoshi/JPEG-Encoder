@@ -1,4 +1,4 @@
-# RTL Module Descriptions 
+# <center> ***RTL Module Descriptions***
 
 | Module Name       | Functionality Summary |
 |------------------|------------------------|
