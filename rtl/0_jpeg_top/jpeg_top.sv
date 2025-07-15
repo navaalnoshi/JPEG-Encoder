@@ -1,19 +1,18 @@
-// -----------------------------------------------------------------------------
-// Module: jpeg_top
-//
+// Copyright 2025 Maktab-e-Digital Systems Lahore.
+// Licensed under the Apache License, Version 2.0, see LICENSE file for details.
+// SPDX-License-Identifier: Apache-2.0
 // Description:
 //   This is the top-level module for the JPEG Encoder Core.
 //   It connects the `fifo_out` and `ff_checker` submodules to create the final
 //   JPEG output stream. It performs the following tasks:
-//
 //   1. Receives 24-bit encoded input data from `fifo_out`.
 //   2. Passes this data to `ff_checker`, which inserts `0x00` after any `0xFF`
 //      in the bitstream (as required by the JPEG format).
 //   3. At end-of-file, if the bitstream contains fewer than 32 valid bits,
 //      it signals this with `eof_data_partial_ready` and outputs the valid bit
 //      count using `end_of_file_bitstream_count`.
-// -----------------------------------------------------------------------------
-
+// Author:Navaal Noshi
+// Date:11th July,2025.
 `timescale 1ns / 100ps
 
 module jpeg_top (
