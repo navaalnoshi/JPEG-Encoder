@@ -106,6 +106,8 @@ module RGB2YCBCR (
 
     // -------------------------------------------------------------------------
     // Stage 2: Normalize results (divide by 8192 = 2^13), round and clamp to 255
+    //It will help to remove the scaling factor (in reality we only remove 14 LSBs
+    //which we used as well as in this we will check the 13th bit LSB is 1 then add 1
     // -------------------------------------------------------------------------
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
