@@ -91,8 +91,13 @@ module RGB2YCBCR (
             cr_product_r <= CR1 * R;
             cr_product_g <= CR2 * G;
             cr_product_b <= CR3 * B;
-
+            
+            // -------------------------------------------------------------------------
             // DC offset = 128 << 13 = 128 * 8192 = 2_097_152
+            //Y = .299 * Red  +  .587 * Green  +  .114 * Blue
+            //Cb = -.1687 * Red  +  -.3313 * Green  + .5 * Blue + 128
+            //Cr = .5 * Red  +  -.4187 * Green  +  -.0813 * Blue + 128
+            // -------------------------------------------------------------------------
             y_sum  <= y_product_r + y_product_g + y_product_b;
             cb_sum <= 22'd2097152 - cb_product_r - cb_product_g + cb_product_b;
             cr_sum <= 22'd2097152 + cr_product_r - cr_product_g - cr_product_b;
