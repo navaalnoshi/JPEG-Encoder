@@ -1,16 +1,27 @@
-/*----------------------------------------------------------------------------------
-Module Name : yd_q_h
-Description : This is a top-level integration module for the luminance (Y) component 
-processing in a JPEG encoder. It connects and controls the three main processing stages:
-    1. y_dct        - performs 2D Discrete Cosine Transform on input 8x8 pixel blocks.
-    2. y_quantizer  - applies quantization using a luminance quantization matrix.
-    3. y_huff       - performs Huffman encoding to produce compressed JPEG bitstream.
-
-This module receives pixel data serially (`data_in`) and propagates it through the DCT,
-quantization, and Huffman stages. Control signals (`enable`, `rst`) are used for
-synchronization. The final JPEG-compliant output bitstream is produced through
-`JPEG_bitstream`, along with data-ready and end-of-block flags.
-----------------------------------------------------------------------------------*/
+// Copyright 2025 Maktab-e-Digital Systems Lahore.
+// Licensed under the Apache License, Version 2.0, see LICENSE file for details.
+// SPDX-License-Identifier: Apache-2.0
+//
+// Module Name: yd_q_h
+// Description:
+//    This is a top-level integration module designed for processing the luminance (Y)
+//    component within a JPEG encoder pipeline. It orchestrates the flow and control
+//    among three primary processing stages:
+//    1. `y_dct`: Executes the 2D Discrete Cosine Transform on incoming 8x8 pixel blocks.
+//    2. `y_quantizer`: Applies the necessary quantization to the DCT coefficients using
+//       a pre-defined luminance quantization matrix.
+//    3. `y_huff`: Performs Huffman encoding on the quantized coefficients to generate
+//       the compressed, variable-length JPEG bitstream.
+//
+//    The module accepts pixel data serially via `data_in` and manages its progression
+//    through the DCT, quantization, and Huffman encoding stages. It incorporates
+//    `enable` and `rst` control signals for proper synchronization and operation.
+//    The final, JPEG-compliant output bitstream is provided via `JPEG_bitstream`,
+//    accompanied by `data_ready` and `end_of_block` flags to signal output validity
+//    and block completion.
+//
+// Author:Rameen
+// Date:19th July,2025.
 
 `timescale 1ns / 100ps
 
@@ -27,10 +38,11 @@ module yd_q_h (
     output logic        end_of_block_empty    // EOB FIFO empty flag
 );
 
-    // ---------------- Internal Control Signals ----------------
+    //  Internal Control Signals 
+    
     logic dct_enable, quantizer_enable;
 
-    // ---------------- DCT Output Wires (Z coefficients) ----------------
+    //  DCT Output Wires (Z coefficients) 
     logic [10:0] Z11_final, Z12_final, Z13_final, Z14_final, Z15_final, Z16_final, Z17_final, Z18_final;
     logic [10:0] Z21_final, Z22_final, Z23_final, Z24_final, Z25_final, Z26_final, Z27_final, Z28_final;
     logic [10:0] Z31_final, Z32_final, Z33_final, Z34_final, Z35_final, Z36_final, Z37_final, Z38_final;
@@ -40,7 +52,7 @@ module yd_q_h (
     logic [10:0] Z71_final, Z72_final, Z73_final, Z74_final, Z75_final, Z76_final, Z77_final, Z78_final;
     logic [10:0] Z81_final, Z82_final, Z83_final, Z84_final, Z85_final, Z86_final, Z87_final, Z88_final;
 
-    // ---------------- Quantizer Output Wires (Q coefficients) ----------------
+    //Quantizer Output Wires (Q coefficients) 
     logic [10:0] Q11, Q12, Q13, Q14, Q15, Q16, Q17, Q18; 	
     logic [10:0] Q21, Q22, Q23, Q24, Q25, Q26, Q27, Q28; 
     logic [10:0] Q31, Q32, Q33, Q34, Q35, Q36, Q37, Q38; 
@@ -50,7 +62,7 @@ module yd_q_h (
     logic [10:0] Q71, Q72, Q73, Q74, Q75, Q76, Q77, Q78; 
     logic [10:0] Q81, Q82, Q83, Q84, Q85, Q86, Q87, Q88; 
 
-    // ---------------- Submodule Instantiations ----------------
+    //  Submodule Instantiations 
 
     // 1. Discrete Cosine Transform (DCT) on 8x8 input block
     y_dct u1 (
